@@ -187,22 +187,63 @@ export default function App() {
     setMessage({ type: '', text: '' });
   };
 
-  // 處理照片上傳 (拍照)
-  const handleImageUpload = (e) => {
+  // 處理照片上傳 (加入前端自動壓縮功能)
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 800 * 1024) {
-      setMessage({ type: 'error', text: '照片大小不可超過 800KB' });
-      return;
-    }
+    setMessage({ type: 'info', text: '照片壓縮處理中...' });
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData(prev => ({ ...prev, photoBase64: reader.result }));
-      setMessage({ type: '', text: '' });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedBase64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            // 將最大寬度或高度限制在 800 像素
+            const MAX_WIDTH = 800;
+            const MAX_HEIGHT = 800;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // 轉成 JPEG 並將畫質壓縮至 60%
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+            resolve(dataUrl);
+          };
+        };
+      });
+
+      // 檢查壓縮後的 Base64 大小 (Firestore 文件上限為 1MB)
+      const sizeInBytes = compressedBase64.length * 0.75;
+      if (sizeInBytes > 950 * 1024) { 
+        setMessage({ type: 'error', text: '圖片過於複雜，壓縮後仍過大，請換一張照片' });
+      } else {
+        setFormData(prev => ({ ...prev, photoBase64: compressedBase64 }));
+        setMessage({ type: '', text: '' });
+      }
+    } catch (error) {
+      console.error("圖片壓縮失敗:", error);
+      setMessage({ type: 'error', text: '圖片處理失敗，請重試' });
+    }
   };
 
   const removePhoto = () => {
@@ -682,11 +723,9 @@ export default function App() {
                 ) : (
                   <label className="flex flex-col items-center justify-center w-full h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition">
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      {/* 將 ImageIcon 改為 Camera 圖示 */}
                       <Camera className="w-6 h-6 text-gray-400 mb-2" />
-                      <p className="text-xs text-gray-500 font-medium">點擊拍照或上傳 (最大 800KB)</p>
+                      <p className="text-xs text-gray-500 font-medium">點擊拍照或上傳 (系統會自動壓縮)</p>
                     </div>
-                    {/* 加入 capture="environment" 屬性來呼叫相機 */}
                     <input 
                       ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" 
                       onChange={handleImageUpload} 
@@ -696,7 +735,11 @@ export default function App() {
               </div>
 
               {message.text && (
-                <div className={`text-xs font-medium p-3 rounded-lg ${message.type === 'error' ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'}`}>
+                <div className={`text-xs font-medium p-3 rounded-lg ${
+                  message.type === 'error' ? 'text-red-600 bg-red-50' : 
+                  message.type === 'info' ? 'text-blue-600 bg-blue-50' : 
+                  'text-green-600 bg-green-50'
+                }`}>
                   {message.text}
                 </div>
               )}
