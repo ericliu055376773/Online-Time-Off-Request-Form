@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { 
   ChevronLeft, Map as MapIcon, Home, List, Clock as ClockIcon, 
   User, Plus, MapPin, AlertCircle, X, Check, Calendar, Trash2,
-  Settings, Save, Edit2, Image as ImageIcon
+  Settings, Save, Edit2, Image as ImageIcon, LogOut
 } from 'lucide-react';
 
 // ==========================================
@@ -15,7 +15,6 @@ const getFirebaseConfig = () => {
   if (typeof __firebase_config !== 'undefined') {
     return JSON.parse(__firebase_config);
   }
-  // 已更新為您最新的 Firebase 專案設定
   return {
     apiKey: "AIzaSyClRBviF-ODfFH71NK8v11reSmw9v-dN9I",
     authDomain: "online-leave-request-form.firebaseapp.com",
@@ -65,6 +64,13 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   
+  // 管理員登入狀態
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   // 編輯狀態
   const [editingId, setEditingId] = useState(null);
   const fileInputRef = useRef(null);
@@ -98,22 +104,25 @@ export default function App() {
   };
 
   // ------------------------------------------
-  // Firebase 身份驗證
+  // Firebase 身份驗證 (自動切換匿名與管理員)
   // ------------------------------------------
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        // 當沒有使用者 (例如剛登出) 時，自動重新匿名登入以確保員工能繼續使用
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        } catch (error) {
+          console.error("登入失敗:", error);
         }
-      } catch (error) {
-        console.error("登入失敗:", error);
       }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -268,8 +277,31 @@ export default function App() {
   };
 
   // ------------------------------------------
-  // 後台設定處理邏輯
+  // 管理員登入與後台邏輯
   // ------------------------------------------
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
+    try {
+      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+      setShowLoginModal(false);
+      setIsBackendOpen(true);
+      setAdminEmail('');
+      setAdminPassword('');
+    } catch (error) {
+      console.error(error);
+      setLoginError('信箱或密碼錯誤，請檢查後重試！');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleAdminLogout = async () => {
+    await signOut(auth);
+    setIsBackendOpen(false);
+  };
+
   const handleOpenSettings = () => {
     setDraftConfig(config);
     setIsSettingsMode(true);
@@ -302,9 +334,6 @@ export default function App() {
     });
   };
 
-  // ------------------------------------------
-  // UI 輔助函數
-  // ------------------------------------------
   const calculateDuration = (start, end) => {
     if (!start || !end) return '';
     const diffMs = new Date(end) - new Date(start);
@@ -317,11 +346,23 @@ export default function App() {
     <div className="min-h-screen bg-gray-100 flex justify-center font-sans">
       <div className="w-full max-w-[400px] bg-[#f8f9fa] relative shadow-2xl flex flex-col h-screen overflow-hidden text-gray-800">
         
-        {/* 頂部導航列 */}
+        {/* 頂部導航列 (控制進入後台邏輯) */}
         <header className="flex justify-center items-center px-6 pt-12 pb-4 bg-[#f8f9fa] z-10">
           <h1 
             className="text-2xl font-bold tracking-wide cursor-pointer hover:opacity-60 transition-opacity select-none"
-            onClick={() => { setIsBackendOpen(!isBackendOpen); setIsSettingsMode(false); }}
+            onClick={() => { 
+              if (isBackendOpen) {
+                setIsBackendOpen(false); 
+                setIsSettingsMode(false);
+              } else {
+                // 如果目前是登入狀態，且擁有 email (代表是我們新增的管理員，不是匿名者)
+                if (user && user.email) {
+                  setIsBackendOpen(true);
+                } else {
+                  setShowLoginModal(true);
+                }
+              }
+            }}
           >
             {config.title}
           </h1>
@@ -405,13 +446,23 @@ export default function App() {
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-bold text-gray-800 mb-6">管理員後台</h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-6 flex justify-between items-center">
+                  管理員後台
+                  <div className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">已登入</div>
+                </h2>
                 <div className="space-y-4">
                   <button onClick={handleOpenSettings} className="w-full bg-gray-50 p-5 rounded-2xl border border-gray-100 flex items-center gap-4 hover:bg-gray-100 hover:shadow-sm transition-all active:scale-[0.98]">
                     <div className="bg-white p-3 rounded-full shadow-sm">
                       <Settings className="w-6 h-6 text-gray-700" />
                     </div>
-                    <span className="text-[15px] font-bold text-gray-800 tracking-wide">設定</span>
+                    <span className="text-[15px] font-bold text-gray-800 tracking-wide">系統設定</span>
+                  </button>
+
+                  <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 hover:shadow-sm transition-all active:scale-[0.98]">
+                    <div className="bg-white p-3 rounded-full shadow-sm text-red-500">
+                      <LogOut className="w-6 h-6" />
+                    </div>
+                    <span className="text-[15px] font-bold text-red-600 tracking-wide">登出管理員帳號</span>
                   </button>
                 </div>
               </>
@@ -481,6 +532,34 @@ export default function App() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* 管理員登入 Modal */}
+        {showLoginModal && (
+          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={() => setShowLoginModal(false)}>
+            <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-gray-800">管理員登入</h3>
+                <button onClick={() => setShowLoginModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">電子郵件</label>
+                  <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gray-300 transition" placeholder="admin@example.com" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">密碼</label>
+                  <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gray-300 transition" placeholder="請輸入密碼" required />
+                </div>
+                {loginError && <p className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded">{loginError}</p>}
+                <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2 flex justify-center items-center gap-2">
+                  {isLoggingIn ? '登入中...' : '確認登入'}
+                </button>
+              </form>
             </div>
           </div>
         )}
