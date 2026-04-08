@@ -351,7 +351,8 @@ export default function App() {
         {/* 頂部導航列 (控制進入後台邏輯) */}
         <header className="flex justify-center items-center px-6 pt-12 pb-4 bg-[#f8f9fa] z-10">
           <h1 
-            className="text-2xl font-bold tracking-wide cursor-pointer hover:opacity-60 transition-opacity select-none"
+            // ★ 在這裡強制加入 text-gray-900 (深黑色)，防止 iOS 將點擊按鈕變成白色
+            className="text-2xl font-bold tracking-wide text-gray-900 cursor-pointer hover:opacity-60 transition-opacity select-none"
             onClick={() => { 
               if (isBackendOpen) {
                 setIsBackendOpen(false); 
