@@ -1,40 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithCustomToken,
-  signInAnonymously,
-  onAuthStateChanged,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  onSnapshot,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
-import {
-  ChevronLeft,
-  Map as MapIcon,
-  Home,
-  List,
-  Clock as ClockIcon,
-  User,
-  Plus,
-  MapPin,
-  AlertCircle,
-  X,
-  Check,
-  Calendar,
-  Trash2,
-  Settings,
-  Save,
-  Edit2,
-  Image as ImageIcon, // 新增 Edit2 與 ImageIcon
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { 
+  ChevronLeft, Map as MapIcon, Home, List, Clock as ClockIcon, 
+  User, Plus, MapPin, AlertCircle, X, Check, Calendar, Trash2,
+  Settings, Save, Edit2, Image as ImageIcon
 } from 'lucide-react';
 
 // ==========================================
@@ -44,14 +15,14 @@ const getFirebaseConfig = () => {
   if (typeof __firebase_config !== 'undefined') {
     return JSON.parse(__firebase_config);
   }
-  // 已替換為您的 Firebase 專案設定
+  // 已更新為您最新的 Firebase 專案設定
   return {
-    apiKey: 'AIzaSyDVWlHSYD8luzqQf2xKQGNm8wgw3T_7j8Y',
-    authDomain: 'online-time-off-request-form.firebaseapp.com',
-    projectId: 'online-time-off-request-form',
-    storageBucket: 'online-time-off-request-form.firebasestorage.app',
-    messagingSenderId: '1036712792330',
-    appId: '1:1036712792330:web:78d79387872e277a55eaf3',
+    apiKey: "AIzaSyClRBviF-ODfFH71NK8v11reSmw9v-dN9I",
+    authDomain: "online-leave-request-form.firebaseapp.com",
+    projectId: "online-leave-request-form",
+    storageBucket: "online-leave-request-form.firebasestorage.app",
+    messagingSenderId: "710134095872",
+    appId: "1:710134095872:web:a232f0deb124b4521b78e5"
   };
 };
 
@@ -61,7 +32,7 @@ const db = getFirestore(app);
 
 const getAppId = () => {
   if (typeof __app_id !== 'undefined') return __app_id;
-  return 'my-leave-app-ui-demo';
+  return 'my-leave-app-ui-demo'; 
 };
 const appId = getAppId();
 
@@ -71,21 +42,12 @@ const appId = getAppId();
 export default function App() {
   const [user, setUser] = useState(null);
   const [leaveRequests, setLeaveRequests] = useState([]);
-
+  
   // 網站全域設定狀態
   const defaultConfig = {
     title: '員工請假紀錄',
     branches: ['台北信義店', '台中勤美店', '高雄巨蛋店'],
-    leaveTypes: [
-      '事假',
-      '病假',
-      '特休',
-      '公假',
-      '喪假',
-      '婚假',
-      '產假',
-      '生理假',
-    ],
+    leaveTypes: ['事假', '病假', '特休', '公假', '喪假', '婚假', '產假', '生理假']
   };
   const [config, setConfig] = useState(defaultConfig);
   const [isSettingsMode, setIsSettingsMode] = useState(false);
@@ -102,7 +64,7 @@ export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
-
+  
   // 編輯狀態
   const [editingId, setEditingId] = useState(null);
   const fileInputRef = useRef(null);
@@ -115,7 +77,7 @@ export default function App() {
     startDate: '',
     endDate: '',
     reason: '',
-    photoBase64: '', // 新增照片欄位
+    photoBase64: ''
   };
   const [formData, setFormData] = useState(defaultFormData);
 
@@ -141,16 +103,13 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (
-          typeof __initial_auth_token !== 'undefined' &&
-          __initial_auth_token
-        ) {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
           await signInAnonymously(auth);
         }
       } catch (error) {
-        console.error('登入失敗:', error);
+        console.error("登入失敗:", error);
       }
     };
     initAuth();
@@ -163,46 +122,21 @@ export default function App() {
   // ------------------------------------------
   useEffect(() => {
     if (!user) return;
+    
+    const leaveCollectionRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests');
+    const unsubscribeLeave = onSnapshot(leaveCollectionRef, (snapshot) => {
+      const requestsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      requestsData.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+      setLeaveRequests(requestsData);
+    }, (error) => console.error("讀取請假單失敗:", error));
 
-    const leaveCollectionRef = collection(
-      db,
-      'artifacts',
-      appId,
-      'users',
-      user.uid,
-      'leave_requests'
-    );
-    const unsubscribeLeave = onSnapshot(
-      leaveCollectionRef,
-      (snapshot) => {
-        const requestsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        requestsData.sort(
-          (a, b) => new Date(a.startDate) - new Date(b.startDate)
-        );
-        setLeaveRequests(requestsData);
-      },
-      (error) => console.error('讀取請假單失敗:', error)
-    );
-
-    const configRef = doc(
-      db,
-      'artifacts',
-      appId,
-      'public',
-      'data',
-      'settings',
-      'global'
-    );
-    const unsubscribeConfig = onSnapshot(
-      configRef,
-      (docSnap) => {
-        if (docSnap.exists()) setConfig(docSnap.data());
-      },
-      (error) => console.error('讀取設定失敗:', error)
-    );
+    const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+    const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
+      if (docSnap.exists()) setConfig(docSnap.data());
+    }, (error) => console.error("讀取設定失敗:", error));
 
     return () => {
       unsubscribeLeave();
@@ -215,7 +149,7 @@ export default function App() {
   // ------------------------------------------
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleFabClick = () => {
@@ -229,11 +163,7 @@ export default function App() {
   };
 
   const openFormWithPreselect = (type) => {
-    setFormData({
-      ...defaultFormData,
-      branch: selectedBranchForMenu,
-      leaveType: type,
-    });
+    setFormData({ ...defaultFormData, branch: selectedBranchForMenu, leaveType: type });
     setEditingId(null);
     setMessage({ type: '', text: '' });
     setIsMenuOpen(false);
@@ -248,12 +178,11 @@ export default function App() {
     setMessage({ type: '', text: '' });
   };
 
-  // 處理照片上傳 (轉為 Base64)
+  // 處理照片上傳
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // 限制檔案大小 ( Firestore 文件限制為 1MB，這裡設定 800KB 較安全)
     if (file.size > 800 * 1024) {
       setMessage({ type: 'error', text: '照片大小不可超過 800KB' });
       return;
@@ -261,95 +190,58 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setFormData((prev) => ({ ...prev, photoBase64: reader.result }));
+      setFormData(prev => ({ ...prev, photoBase64: reader.result }));
       setMessage({ type: '', text: '' });
     };
     reader.readAsDataURL(file);
   };
 
   const removePhoto = () => {
-    setFormData((prev) => ({ ...prev, photoBase64: '' }));
+    setFormData(prev => ({ ...prev, photoBase64: '' }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!formData.branch) {
-      setMessage({ type: 'error', text: '請選擇分店！' });
-      return;
-    }
-    if (!formData.name.trim()) {
-      setMessage({ type: 'error', text: '請輸入員工姓名！' });
-      return;
-    }
-    if (!formData.startDate) {
-      setMessage({ type: 'error', text: '請選擇開始時間！' });
-      return;
-    }
-    if (!formData.endDate) {
-      setMessage({ type: 'error', text: '請選擇結束時間！' });
-      return;
-    }
-    if (!formData.reason.trim()) {
-      setMessage({ type: 'error', text: '請填寫請假事由！' });
-      return;
-    }
+    
+    if (!formData.branch) { setMessage({ type: 'error', text: '請選擇分店！' }); return; }
+    if (!formData.name.trim()) { setMessage({ type: 'error', text: '請輸入員工姓名！' }); return; }
+    if (!formData.startDate) { setMessage({ type: 'error', text: '請選擇開始時間！' }); return; }
+    if (!formData.endDate) { setMessage({ type: 'error', text: '請選擇結束時間！' }); return; }
+    if (!formData.reason.trim()) { setMessage({ type: 'error', text: '請填寫請假事由！' }); return; }
     if (new Date(formData.endDate) <= new Date(formData.startDate)) {
-      setMessage({ type: 'error', text: '結束時間必須晚於開始時間！' });
-      return;
+      setMessage({ type: 'error', text: '結束時間必須晚於開始時間！' }); return;
     }
-    if (!user) {
-      setMessage({ type: 'error', text: '尚未連線，請稍後再試。' });
-      return;
-    }
+    if (!user) { setMessage({ type: 'error', text: '尚未連線，請稍後再試。' }); return; }
 
     setIsSubmitting(true);
     setMessage({ type: '', text: '' });
 
     try {
       if (editingId) {
-        // 編輯模式：更新資料
-        const docRef = doc(
-          db,
-          'artifacts',
-          appId,
-          'users',
-          user.uid,
-          'leave_requests',
-          editingId
-        );
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', editingId);
         await updateDoc(docRef, {
           ...formData,
-          updatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
         });
       } else {
-        // 新增模式：加入資料
-        const leaveCollectionRef = collection(
-          db,
-          'artifacts',
-          appId,
-          'users',
-          user.uid,
-          'leave_requests'
-        );
+        const leaveCollectionRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests');
         await addDoc(leaveCollectionRef, {
           ...formData,
           status: '待審核',
-          createdAt: serverTimestamp(),
+          createdAt: serverTimestamp()
         });
       }
-
+      
       closeForm();
     } catch (error) {
-      console.error('送出失敗:', error);
+      console.error("送出失敗:", error);
       setMessage({ type: 'error', text: '儲存失敗，請重試' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // 開啟編輯模式
   const handleEdit = (req) => {
     setFormData({
       name: req.name,
@@ -358,7 +250,7 @@ export default function App() {
       startDate: req.startDate,
       endDate: req.endDate,
       reason: req.reason,
-      photoBase64: req.photoBase64 || '',
+      photoBase64: req.photoBase64 || ''
     });
     setEditingId(req.id);
     setMessage({ type: '', text: '' });
@@ -369,11 +261,9 @@ export default function App() {
   const handleDelete = async (id) => {
     if (!user) return;
     try {
-      await deleteDoc(
-        doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', id)
-      );
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', id));
     } catch (error) {
-      console.error('刪除失敗:', error);
+      console.error("刪除失敗:", error);
     }
   };
 
@@ -388,19 +278,11 @@ export default function App() {
   const handleSaveConfig = async () => {
     setIsSavingConfig(true);
     try {
-      const configRef = doc(
-        db,
-        'artifacts',
-        appId,
-        'public',
-        'data',
-        'settings',
-        'global'
-      );
+      const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
       await setDoc(configRef, draftConfig);
       setIsSettingsMode(false);
     } catch (error) {
-      console.error('儲存設定失敗:', error);
+      console.error("儲存設定失敗:", error);
     } finally {
       setIsSavingConfig(false);
     }
@@ -408,15 +290,12 @@ export default function App() {
 
   const handleAddArrayItem = (field, value, setter) => {
     if (!value.trim()) return;
-    setDraftConfig((prev) => ({
-      ...prev,
-      [field]: [...prev[field], value.trim()],
-    }));
+    setDraftConfig(prev => ({ ...prev, [field]: [...prev[field], value.trim()] }));
     setter('');
   };
 
   const handleRemoveArrayItem = (field, index) => {
-    setDraftConfig((prev) => {
+    setDraftConfig(prev => {
       const newArray = [...prev[field]];
       newArray.splice(index, 1);
       return { ...prev, [field]: newArray };
@@ -426,25 +305,6 @@ export default function App() {
   // ------------------------------------------
   // UI 輔助函數
   // ------------------------------------------
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleTimeString('zh-TW', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-  };
-
-  // 新增日期格式化 (MM/DD)
-  const formatDateTimeline = (dateString) => {
-    if (!dateString) return '';
-    const d = new Date(dateString);
-    return `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d
-      .getDate()
-      .toString()
-      .padStart(2, '0')}`;
-  };
-
   const calculateDuration = (start, end) => {
     if (!start || !end) return '';
     const diffMs = new Date(end) - new Date(start);
@@ -456,14 +316,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center font-sans">
       <div className="w-full max-w-[400px] bg-[#f8f9fa] relative shadow-2xl flex flex-col h-screen overflow-hidden text-gray-800">
+        
         {/* 頂部導航列 */}
         <header className="flex justify-center items-center px-6 pt-12 pb-4 bg-[#f8f9fa] z-10">
-          <h1
+          <h1 
             className="text-2xl font-bold tracking-wide cursor-pointer hover:opacity-60 transition-opacity select-none"
-            onClick={() => {
-              setIsBackendOpen(!isBackendOpen);
-              setIsSettingsMode(false);
-            }}
+            onClick={() => { setIsBackendOpen(!isBackendOpen); setIsSettingsMode(false); }}
           >
             {config.title}
           </h1>
@@ -478,10 +336,7 @@ export default function App() {
             {isSettingsMode ? (
               <div className="space-y-6 pb-20">
                 <div className="flex items-center justify-between mb-2">
-                  <button
-                    onClick={() => setIsSettingsMode(false)}
-                    className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"
-                  >
+                  <button onClick={() => setIsSettingsMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition">
                     <ChevronLeft className="w-6 h-6" />
                   </button>
                   <h2 className="text-lg font-bold text-gray-800">系統設定</h2>
@@ -489,146 +344,75 @@ export default function App() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    系統標題文字
-                  </label>
-                  <input
-                    type="text"
-                    value={draftConfig.title}
-                    onChange={(e) =>
-                      setDraftConfig((prev) => ({
-                        ...prev,
-                        title: e.target.value,
-                      }))
-                    }
-                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none transition"
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">系統標題文字</label>
+                  <input 
+                    type="text" value={draftConfig.title} 
+                    onChange={(e) => setDraftConfig(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none transition" 
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    分店名單管理
-                  </label>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">分店名單管理</label>
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
                     {draftConfig.branches.map((b, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-gray-100 shadow-sm"
-                      >
-                        <span className="text-sm font-medium text-gray-700">
-                          {b}
-                        </span>
-                        <button
-                          onClick={() => handleRemoveArrayItem('branches', i)}
-                          className="text-gray-300 hover:text-red-500 transition"
-                        >
+                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-gray-100 shadow-sm">
+                        <span className="text-sm font-medium text-gray-700">{b}</span>
+                        <button onClick={() => handleRemoveArrayItem('branches', i)} className="text-gray-300 hover:text-red-500 transition">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
                     <div className="flex gap-2 pt-2">
-                      <input
-                        type="text"
-                        value={newBranch}
-                        onChange={(e) => setNewBranch(e.target.value)}
-                        placeholder="輸入新分店..."
+                      <input 
+                        type="text" value={newBranch} onChange={e => setNewBranch(e.target.value)} placeholder="輸入新分店..."
                         className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none transition"
                       />
-                      <button
-                        onClick={() =>
-                          handleAddArrayItem(
-                            'branches',
-                            newBranch,
-                            setNewBranch
-                          )
-                        }
-                        className="bg-[#333333] text-white px-4 rounded-lg hover:bg-black transition"
-                      >
-                        新增
-                      </button>
+                      <button onClick={() => handleAddArrayItem('branches', newBranch, setNewBranch)} className="bg-[#333333] text-white px-4 rounded-lg hover:bg-black transition">新增</button>
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    假別清單管理
-                  </label>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">假別清單管理</label>
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
                     {draftConfig.leaveTypes.map((t, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-gray-100 shadow-sm"
-                      >
-                        <span className="text-sm font-medium text-gray-700">
-                          {t}
-                        </span>
-                        <button
-                          onClick={() => handleRemoveArrayItem('leaveTypes', i)}
-                          className="text-gray-300 hover:text-red-500 transition"
-                        >
+                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-gray-100 shadow-sm">
+                        <span className="text-sm font-medium text-gray-700">{t}</span>
+                        <button onClick={() => handleRemoveArrayItem('leaveTypes', i)} className="text-gray-300 hover:text-red-500 transition">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
                     <div className="flex gap-2 pt-2">
-                      <input
-                        type="text"
-                        value={newLeaveType}
-                        onChange={(e) => setNewLeaveType(e.target.value)}
-                        placeholder="輸入新假別..."
+                      <input 
+                        type="text" value={newLeaveType} onChange={e => setNewLeaveType(e.target.value)} placeholder="輸入新假別..."
                         className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none transition"
                       />
-                      <button
-                        onClick={() =>
-                          handleAddArrayItem(
-                            'leaveTypes',
-                            newLeaveType,
-                            setNewLeaveType
-                          )
-                        }
-                        className="bg-[#333333] text-white px-4 rounded-lg hover:bg-black transition"
-                      >
-                        新增
-                      </button>
+                      <button onClick={() => handleAddArrayItem('leaveTypes', newLeaveType, setNewLeaveType)} className="bg-[#333333] text-white px-4 rounded-lg hover:bg-black transition">新增</button>
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-4 pb-10">
-                  <button
-                    onClick={handleSaveConfig}
-                    disabled={isSavingConfig}
+                  <button 
+                    onClick={handleSaveConfig} disabled={isSavingConfig}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-bold tracking-wide transition shadow-lg shadow-blue-600/20 flex justify-center items-center gap-2"
                   >
-                    {isSavingConfig ? (
-                      '儲存中...'
-                    ) : (
-                      <>
-                        <Save className="w-5 h-5" /> 儲存設定
-                      </>
-                    )}
+                    {isSavingConfig ? '儲存中...' : <><Save className="w-5 h-5"/> 儲存設定</>}
                   </button>
                 </div>
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-bold text-gray-800 mb-6">
-                  管理員後台
-                </h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-6">管理員後台</h2>
                 <div className="space-y-4">
-                  <button
-                    onClick={handleOpenSettings}
-                    className="w-full bg-gray-50 p-5 rounded-2xl border border-gray-100 flex items-center gap-4 hover:bg-gray-100 hover:shadow-sm transition-all active:scale-[0.98]"
-                  >
+                  <button onClick={handleOpenSettings} className="w-full bg-gray-50 p-5 rounded-2xl border border-gray-100 flex items-center gap-4 hover:bg-gray-100 hover:shadow-sm transition-all active:scale-[0.98]">
                     <div className="bg-white p-3 rounded-full shadow-sm">
                       <Settings className="w-6 h-6 text-gray-700" />
                     </div>
-                    <span className="text-[15px] font-bold text-gray-800 tracking-wide">
-                      設定
-                    </span>
+                    <span className="text-[15px] font-bold text-gray-800 tracking-wide">設定</span>
                   </button>
-                  {/* 已移除：意見表單紀錄按鈕 */}
                 </div>
               </>
             )}
@@ -639,94 +423,58 @@ export default function App() {
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 pb-32 pt-4">
             <div className="mb-4">
-              {/* 已刪除「請假人員名單」標題 */}
               {leaveRequests.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">
-                  目前沒有任何請假紀錄
-                </div>
+                <div className="text-center py-12 text-gray-400 text-sm">目前沒有任何請假紀錄</div>
               ) : (
                 <div className="relative pt-2">
-                  {leaveRequests.map((req, index) => (
-                    // 將整筆紀錄包裝成單一卡片，並設定 overflow-hidden 讓左側直條與卡片融合
-                    <div
-                      key={req.id}
-                      className="flex relative mb-6 group bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] overflow-hidden border border-gray-50"
-                    >
-                      {/* 左側直式分店標籤：與卡片自動等高 */}
-                      <div
-                        className={`w-10 shrink-0 flex items-center justify-center ${getBranchColor(
-                          req.branch
-                        )}`}
-                      >
-                        <span
-                          className="text-white text-[13px] font-bold tracking-[0.2em] py-3 select-none"
+                  {leaveRequests.map((req) => (
+                    <div key={req.id} className="flex relative mb-6 group bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] overflow-hidden border border-gray-50">
+                      
+                      {/* 左側直式分店標籤 */}
+                      <div className={`w-10 shrink-0 flex items-center justify-center ${getBranchColor(req.branch)}`}>
+                        <span 
+                          className="text-white text-[13px] font-bold tracking-[0.2em] py-3 select-none" 
                           style={{ writingMode: 'vertical-rl' }}
                         >
                           {req.branch}
                         </span>
                       </div>
 
-                      {/* 右側卡片內容 */}
+                      {/* 右側卡片 */}
                       <div className="flex-1 p-4 relative bg-white">
                         <div className="flex justify-between items-start mb-3">
                           <h4 className="font-bold text-gray-900 text-[15px] leading-tight">
                             {req.name}
                           </h4>
                           <div className="flex items-center gap-2.5">
-                            {/* 新增：編輯按鈕 */}
-                            <button
-                              onClick={() => handleEdit(req)}
-                              className="text-gray-300 hover:text-blue-500 transition"
-                            >
+                            <button onClick={() => handleEdit(req)} className="text-gray-300 hover:text-blue-500 transition">
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleDelete(req.id)}
-                              className="text-gray-300 hover:text-red-500 transition"
-                            >
+                            <button onClick={() => handleDelete(req.id)} className="text-gray-300 hover:text-red-500 transition">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
-
+                        
                         <div className="space-y-1.5 mb-3">
                           <div className="flex items-center text-xs text-gray-400">
                             <Calendar className="w-3.5 h-3.5 mr-2 shrink-0" />
-                            <span className="truncate">
-                              {new Date(req.startDate).toLocaleDateString(
-                                'zh-TW'
-                              )}{' '}
-                              -{' '}
-                              {new Date(req.endDate).toLocaleDateString(
-                                'zh-TW'
-                              )}
-                            </span>
+                            <span className="truncate">{new Date(req.startDate).toLocaleDateString('zh-TW')} - {new Date(req.endDate).toLocaleDateString('zh-TW')}</span>
                           </div>
                           <div className="flex items-center text-xs text-gray-400">
                             <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
-                            <span>
-                              時長：
-                              {calculateDuration(req.startDate, req.endDate)} (
-                              {req.leaveType})
-                            </span>
+                            <span>時長：{calculateDuration(req.startDate, req.endDate)} ({req.leaveType})</span>
                           </div>
                         </div>
 
-                        {/* 如果有照片，顯示縮圖 */}
                         {req.photoBase64 && (
                           <div className="mb-3 rounded-lg overflow-hidden border border-gray-100 max-h-32 bg-gray-50 flex justify-center">
-                            <img
-                              src={req.photoBase64}
-                              alt="Attached"
-                              className="object-cover h-full w-full"
-                            />
+                            <img src={req.photoBase64} alt="Attached" className="object-cover h-full w-full" />
                           </div>
                         )}
 
                         <div className="bg-gray-50/80 p-2.5 rounded-lg border border-gray-50">
-                          <p className="text-[13px] text-gray-600 leading-relaxed break-words">
-                            {req.reason}
-                          </p>
+                          <p className="text-[13px] text-gray-600 leading-relaxed break-words">{req.reason}</p>
                         </div>
                       </div>
                     </div>
@@ -737,73 +485,37 @@ export default function App() {
           </div>
         )}
 
-        {/* 遮罩背景 (選單開啟時) */}
+        {/* 遮罩背景 */}
         {isMenuOpen && (
-          <div
-            className="absolute inset-0 bg-gray-900/10 backdrop-blur-[2px] z-20"
-            onClick={() => setIsMenuOpen(false)}
-          ></div>
+          <div className="absolute inset-0 bg-gray-900/10 backdrop-blur-[2px] z-20" onClick={() => setIsMenuOpen(false)}></div>
         )}
 
         {/* 彈出選單 */}
-        <div
-          className={`absolute bottom-[185px] right-6 flex flex-col items-end gap-2 transition-all duration-300 origin-bottom-right z-30 ${
-            isMenuOpen
-              ? 'scale-100 opacity-100'
-              : 'scale-0 opacity-0 pointer-events-none'
-          }`}
-        >
+        <div className={`absolute bottom-[185px] right-6 flex flex-col items-end gap-2 transition-all duration-300 origin-bottom-right z-30 ${isMenuOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
           {menuStep === 1 ? (
             <>
-              <div className="text-xs font-bold text-gray-500 mb-1 mr-1 bg-white/80 px-2.5 py-1 rounded-md shadow-sm">
-                請先選擇分店
-              </div>
-              {branches.map((branch) => (
-                <button
-                  key={branch}
-                  onClick={() => handleBranchSelect(branch)}
-                  className="bg-white text-gray-800 text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-gray-50 transition border border-gray-100"
-                >
+              <div className="text-xs font-bold text-gray-500 mb-1 mr-1 bg-white/80 px-2.5 py-1 rounded-md shadow-sm">請先選擇分店</div>
+              {branches.map(branch => (
+                <button key={branch} onClick={() => handleBranchSelect(branch)} className="bg-white text-gray-800 text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-gray-50 transition border border-gray-100">
                   {branch}
                 </button>
               ))}
             </>
           ) : (
             <>
-              <div className="text-xs font-bold text-gray-500 mb-1 mr-1 bg-white/80 px-2.5 py-1 rounded-md shadow-sm">
-                目前分店：{selectedBranchForMenu}
-              </div>
-              <button
-                onClick={() => openFormWithPreselect('事假')}
-                className="bg-[#333333] text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-black transition"
-              >
-                新增事假
-              </button>
-              <button
-                onClick={() => openFormWithPreselect('病假')}
-                className="bg-[#333333] text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-black transition"
-              >
-                新增病假
-              </button>
-              <button
-                onClick={() => openFormWithPreselect('其他假別')}
-                className="bg-[#333333] text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-black transition"
-              >
-                自定義假別
-              </button>
+              <div className="text-xs font-bold text-gray-500 mb-1 mr-1 bg-white/80 px-2.5 py-1 rounded-md shadow-sm">目前分店：{selectedBranchForMenu}</div>
+              <button onClick={() => openFormWithPreselect('事假')} className="bg-[#333333] text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-black transition">新增事假</button>
+              <button onClick={() => openFormWithPreselect('病假')} className="bg-[#333333] text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-black transition">新增病假</button>
+              <button onClick={() => openFormWithPreselect('其他假別')} className="bg-[#333333] text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl hover:bg-black transition">自定義假別</button>
             </>
           )}
         </div>
 
         {/* 浮動操作按鈕 */}
         {!isBackendOpen && (
-          <button
+          <button 
             onClick={handleFabClick}
-            className={`absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 ${
-              isMenuOpen
-                ? 'bg-white text-black rotate-45'
-                : 'bg-[#333333] text-white'
-            }`}
+            className={`absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 ${isMenuOpen ? 'bg-white text-black rotate-45' : 'bg-[#333333] text-white'}`}
           >
             <Plus className="w-7 h-7" />
           </button>
@@ -811,153 +523,75 @@ export default function App() {
 
         {/* 底部導航列 */}
         <nav className="absolute bottom-0 w-full bg-white px-8 py-5 flex justify-center items-center rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8">
-          <div
-            onClick={() => setIsBackendOpen(false)}
-            className={`w-full px-6 py-3 rounded-full flex items-center justify-center gap-3 shadow-md cursor-pointer transition ${
-              !isBackendOpen
-                ? 'bg-[#333333] text-white hover:bg-black'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
+          <div onClick={() => setIsBackendOpen(false)} className={`w-full px-6 py-3 rounded-full flex items-center justify-center gap-3 shadow-md cursor-pointer transition ${!isBackendOpen ? 'bg-[#333333] text-white hover:bg-black' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             <List className="w-5 h-5" />
-            <span className="text-base font-medium tracking-wider">
-              假單總覽
-            </span>
+            <span className="text-base font-medium tracking-wider">假單總覽</span>
           </div>
         </nav>
 
         {/* =========================================
             填寫表單 Modal (由底部滑出)
             ========================================= */}
-        <div
-          className={`absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-400 ease-out h-[90%] flex flex-col ${
-            isFormOpen ? 'translate-y-0' : 'translate-y-full'
-          }`}
-        >
+        <div className={`absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-400 ease-out h-[90%] flex flex-col ${isFormOpen ? 'translate-y-0' : 'translate-y-full'}`}>
           <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-gray-800">
-              {editingId ? '編輯請假單' : '填寫請假單'}
-            </h2>
-            <button
-              onClick={closeForm}
-              className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"
-            >
+            <h2 className="text-lg font-bold text-gray-800">{editingId ? '編輯請假單' : '填寫請假單'}</h2>
+            <button onClick={closeForm} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
               <X className="w-5 h-5" />
             </button>
           </div>
-
+          
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <form id="leaveForm" onSubmit={handleSubmit} className="space-y-5">
+              
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                  分店名稱
-                </label>
-                <select
-                  name="branch"
-                  value={formData.branch}
-                  onChange={handleInputChange}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none"
-                >
-                  <option value="" disabled>
-                    請選擇分店
-                  </option>
-                  {branches.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">分店名稱</label>
+                <select name="branch" value={formData.branch} onChange={handleInputChange} 
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
+                  <option value="" disabled>請選擇分店</option>
+                  {branches.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                  員工姓名
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none"
-                  placeholder="輸入您的姓名"
-                />
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">員工姓名</label>
+                <input type="text" name="name" value={formData.name} onChange={handleInputChange} 
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" placeholder="輸入您的姓名" />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                  請假類別
-                </label>
-                <select
-                  name="leaveType"
-                  value={formData.leaveType}
-                  onChange={handleInputChange}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none"
-                >
-                  {leaveTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">請假類別</label>
+                <select name="leaveType" value={formData.leaveType} onChange={handleInputChange} 
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
+                  {leaveTypes.map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                    開始時間
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleInputChange}
-                    className="w-full bg-gray-50 border-none rounded-xl px-3 py-3.5 text-xs font-medium text-gray-800 outline-none"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">開始時間</label>
+                  <input type="datetime-local" name="startDate" value={formData.startDate} onChange={handleInputChange} 
+                    className="w-full bg-gray-50 border-none rounded-xl px-3 py-3.5 text-xs font-medium text-gray-800 outline-none" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                    結束時間
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleInputChange}
-                    className="w-full bg-gray-50 border-none rounded-xl px-3 py-3.5 text-xs font-medium text-gray-800 outline-none"
-                  />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">結束時間</label>
+                  <input type="datetime-local" name="endDate" value={formData.endDate} onChange={handleInputChange} 
+                    className="w-full bg-gray-50 border-none rounded-xl px-3 py-3.5 text-xs font-medium text-gray-800 outline-none" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                  請假事由
-                </label>
-                <textarea
-                  name="reason"
-                  rows="3"
-                  value={formData.reason}
-                  onChange={handleInputChange}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none"
-                  placeholder="簡單說明請假原因..."
-                ></textarea>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">請假事由</label>
+                <textarea name="reason" rows="3" value={formData.reason} onChange={handleInputChange} 
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none" placeholder="簡單說明請假原因..."></textarea>
               </div>
 
-              {/* 新增：照片上傳區塊 */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">
-                  附加照片 (非必填)
-                </label>
-
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">附加照片 (非必填)</label>
                 {formData.photoBase64 ? (
                   <div className="relative w-full h-32 rounded-xl overflow-hidden border border-gray-200">
-                    <img
-                      src={formData.photoBase64}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={removePhoto}
+                    <img src={formData.photoBase64} alt="Preview" className="w-full h-full object-cover" />
+                    <button 
+                      type="button" onClick={removePhoto}
                       className="absolute top-2 right-2 bg-gray-900/60 text-white p-1.5 rounded-full hover:bg-gray-900 transition"
                     >
                       <X className="w-4 h-4" />
@@ -967,29 +601,18 @@ export default function App() {
                   <label className="flex flex-col items-center justify-center w-full h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition">
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <ImageIcon className="w-6 h-6 text-gray-400 mb-2" />
-                      <p className="text-xs text-gray-500 font-medium">
-                        點擊上傳照片 (最大 800KB)
-                      </p>
+                      <p className="text-xs text-gray-500 font-medium">點擊上傳照片 (最大 800KB)</p>
                     </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleImageUpload}
+                    <input 
+                      ref={fileInputRef} type="file" accept="image/*" className="hidden" 
+                      onChange={handleImageUpload} 
                     />
                   </label>
                 )}
               </div>
 
               {message.text && (
-                <div
-                  className={`text-xs font-medium p-3 rounded-lg ${
-                    message.type === 'error'
-                      ? 'text-red-600 bg-red-50'
-                      : 'text-green-600 bg-green-50'
-                  }`}
-                >
+                <div className={`text-xs font-medium p-3 rounded-lg ${message.type === 'error' ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'}`}>
                   {message.text}
                 </div>
               )}
@@ -997,23 +620,17 @@ export default function App() {
           </div>
 
           <div className="p-6 bg-white border-t border-gray-50 pb-10">
-            <button
-              form="leaveForm"
-              type="submit"
-              disabled={isSubmitting}
+            <button 
+              form="leaveForm" type="submit" disabled={isSubmitting}
               className="w-full bg-[#333333] hover:bg-black text-white py-4 rounded-2xl font-bold tracking-wide transition shadow-lg flex justify-center items-center gap-2"
             >
-              {isSubmitting ? (
-                '處理中...'
-              ) : (
-                <>
-                  <Check className="w-5 h-5" />{' '}
-                  {editingId ? '儲存修改' : '確認送出'}
-                </>
+              {isSubmitting ? '處理中...' : (
+                <><Check className="w-5 h-5"/> {editingId ? '儲存修改' : '確認送出'}</>
               )}
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
