@@ -5,7 +5,7 @@ import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, serverTim
 import { 
   ChevronLeft, Map as MapIcon, Home, List, Clock as ClockIcon, 
   User, Plus, MapPin, AlertCircle, X, Check, Calendar, Trash2,
-  Settings, Save, Edit2, Image as ImageIcon, LogOut
+  Settings, Save, Edit2, Image as ImageIcon, LogOut, Camera
 } from 'lucide-react';
 
 // ==========================================
@@ -187,7 +187,7 @@ export default function App() {
     setMessage({ type: '', text: '' });
   };
 
-  // 處理照片上傳
+  // 處理照片上傳 (拍照)
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -682,11 +682,13 @@ export default function App() {
                 ) : (
                   <label className="flex flex-col items-center justify-center w-full h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition">
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <ImageIcon className="w-6 h-6 text-gray-400 mb-2" />
-                      <p className="text-xs text-gray-500 font-medium">點擊上傳照片 (最大 800KB)</p>
+                      {/* 將 ImageIcon 改為 Camera 圖示 */}
+                      <Camera className="w-6 h-6 text-gray-400 mb-2" />
+                      <p className="text-xs text-gray-500 font-medium">點擊拍照或上傳 (最大 800KB)</p>
                     </div>
+                    {/* 加入 capture="environment" 屬性來呼叫相機 */}
                     <input 
-                      ref={fileInputRef} type="file" accept="image/*" className="hidden" 
+                      ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" 
                       onChange={handleImageUpload} 
                     />
                   </label>
