@@ -343,8 +343,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex justify-center font-sans">
-      <div className="w-full max-w-[400px] bg-[#f8f9fa] relative shadow-2xl flex flex-col h-screen overflow-hidden text-gray-800">
+    // ★ 這裡將原本的 min-h-screen 改為了 min-h-[100dvh]，動態適應手機瀏覽器高度
+    <div className="min-h-[100dvh] bg-gray-100 flex justify-center font-sans">
+      {/* ★ 這裡將 h-screen 改為了 h-[100dvh] */}
+      <div className="w-full max-w-[400px] bg-[#f8f9fa] relative shadow-2xl flex flex-col h-[100dvh] overflow-hidden text-gray-800">
         
         {/* 頂部導航列 (控制進入後台邏輯) */}
         <header className="flex justify-center items-center px-6 pt-12 pb-4 bg-[#f8f9fa] z-10">
