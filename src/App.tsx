@@ -16,7 +16,7 @@ const getFirebaseConfig = () => {
     return JSON.parse(__firebase_config);
   }
   return {
-    apiKey: "AIzaSyClRBviF-ODfFH71NK8v9reSmw9v-dN9I",
+    apiKey: "AIzaSyClRBviF-ODfFH71NK8v11reSmw9v-dN9I",
     authDomain: "online-leave-request-form.firebaseapp.com",
     projectId: "online-leave-request-form",
     storageBucket: "online-leave-request-form.firebasestorage.app",
