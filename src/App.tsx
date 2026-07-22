@@ -422,7 +422,7 @@ export default function App() {
     finally { setIsLoggingIn(false); }
   };
 
-  const handleAdminLogout = () => { setIsBackendOpen(false); setLoggedInBranch(null); setIsSettingsMode(false); };
+  const handleAdminLogout = async () => { await signOut(auth); setIsBackendOpen(false); setLoggedInBranch(null); };
 
   const handleOpenSettings = () => { setDraftConfig(JSON.parse(JSON.stringify(config))); setIsSettingsMode(true); setVisiblePasswords({}); };
 
@@ -473,7 +473,7 @@ export default function App() {
             <div className="w-16 h-16 bg-[#333333] rounded-2xl flex items-center justify-center mb-6 shadow-lg">
               <FileText className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2 tracking-wide cursor-pointer hover:opacity-60 transition-opacity select-none" onClick={() => setShowAdminLoginModal(true)}>{config.title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2 tracking-wide">{config.title}</h1>
             <p className="text-sm text-gray-400 mb-10">請選擇您的門店並輸入密碼</p>
 
             {branchNames.length === 0 ? (
@@ -520,27 +520,30 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="px-8 pb-10 pt-4"></div>
+          <div className="px-8 pb-10 pt-4">
+            <button onClick={() => setShowAdminLoginModal(true)} className="w-full text-center text-xs text-gray-400 hover:text-gray-600 transition py-3">管理員登入</button>
+          </div>
 
-          {/* 管理員登入 Modal — 只需密碼 */}
+          {/* 管理員登入 Modal */}
           {showAdminLoginModal && (
             <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={() => setShowAdminLoginModal(false)}>
               <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-bold text-gray-800">管理員登入</h3>
-                  <button onClick={() => { setShowAdminLoginModal(false); setLoginError(''); }} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setShowAdminLoginModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
                 </div>
-                <div className="space-y-4">
+                <form onSubmit={handleAdminLogin} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">管理員密碼</label>
-                    <input type="password" value={adminPassword} onChange={e => { setAdminPassword(e.target.value); setLoginError(''); }}
-                      onKeyDown={e => { if (e.key === 'Enter') { if (adminPassword === '6773') { setShowAdminLoginModal(false); setIsBackendOpen(true); setLoggedInBranch('__admin__'); setAdminPassword(''); setLoginError(''); } else { setLoginError('密碼錯誤！'); } } }}
-                      className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="請輸入管理員密碼" />
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">電子郵件</label>
+                    <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="admin@example.com" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">密碼</label>
+                    <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="請輸入密碼" required />
                   </div>
                   {loginError && <p className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded">{loginError}</p>}
-                  <button type="button" onClick={() => { if (adminPassword === '6773') { setShowAdminLoginModal(false); setIsBackendOpen(true); setLoggedInBranch('__admin__'); setAdminPassword(''); setLoginError(''); } else { setLoginError('密碼錯誤！'); } }}
-                    className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">確認登入</button>
-                </div>
+                  <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">{isLoggingIn ? '登入中...' : '確認登入'}</button>
+                </form>
               </div>
             </div>
           )}
@@ -575,8 +578,8 @@ export default function App() {
               else { setShowAdminLoginModal(true); }
             }}>{config.title}</h1>
           <div className="flex items-center gap-2">
-            {/* ★ 員工管理按鈕 — 僅門店員工可見 */}
-            {!isBackendOpen && loggedInBranch !== '__admin__' && (
+            {/* ★ 員工管理按鈕 */}
+            {!isBackendOpen && (
               <button onClick={() => { setIsEmployeeModalOpen(true); setEditingEmployeeIndex(null); setNewEmployeeName(''); }}
                 className="text-gray-400 hover:text-gray-700 transition p-1"><Users className="w-4 h-4" /></button>
             )}
@@ -795,23 +798,18 @@ export default function App() {
 
         {/* 管理員登入 Modal */}
         {showAdminLoginModal && (
-          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={() => { setShowAdminLoginModal(false); setLoginError(''); }}>
+          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={() => setShowAdminLoginModal(false)}>
             <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-bold text-gray-800">管理員登入</h3>
-                <button onClick={() => { setShowAdminLoginModal(false); setLoginError(''); }} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                <button onClick={() => setShowAdminLoginModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">管理員密碼</label>
-                  <input type="password" value={adminPassword} onChange={e => { setAdminPassword(e.target.value); setLoginError(''); }}
-                    onKeyDown={e => { if (e.key === 'Enter') { if (adminPassword === '6773') { setShowAdminLoginModal(false); setIsBackendOpen(true); setLoggedInBranch('__admin__'); setAdminPassword(''); setLoginError(''); } else { setLoginError('密碼錯誤！'); } } }}
-                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="請輸入管理員密碼" />
-                </div>
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">電子郵件</label><input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="admin@example.com" required /></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">密碼</label><input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="請輸入密碼" required /></div>
                 {loginError && <p className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded">{loginError}</p>}
-                <button type="button" onClick={() => { if (adminPassword === '6773') { setShowAdminLoginModal(false); setIsBackendOpen(true); setLoggedInBranch('__admin__'); setAdminPassword(''); setLoginError(''); } else { setLoginError('密碼錯誤！'); } }}
-                  className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">確認登入</button>
-              </div>
+                <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">{isLoggingIn ? '登入中...' : '確認登入'}</button>
+              </form>
             </div>
           </div>
         )}
@@ -869,16 +867,16 @@ export default function App() {
           </div>
         )}
 
-        {/* FAB — 管理員後台時隱藏 */}
-        {!isBackendOpen && loggedInBranch !== '__admin__' && activeTab !== 'stats' && (
+        {/* FAB */}
+        {!isBackendOpen && activeTab !== 'stats' && (
           <button onClick={handleFabClick}
             className="absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 bg-[#333333] text-white hover:bg-black active:scale-95">
             <Plus className="w-7 h-7" />
           </button>
         )}
 
-        {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
-        <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
+        {/* ★ 底部導航列（三個分頁） */}
+        <nav className="absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8">
           <div onClick={() => { setIsBackendOpen(false); setActiveTab('leave'); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <List className="w-4 h-4" />
@@ -994,11 +992,9 @@ export default function App() {
               <span className="text-sm text-gray-500 font-medium">{getNowDateTimeString()}</span>
               <span className="text-[11px] text-gray-400 ml-auto">自動偵測</span>
             </div>
-            {loggedInBranch && loggedInBranch !== '__admin__' && (
-              <div className="flex items-center gap-2 mb-4">
-                <span className="inline-block bg-gray-200 text-gray-600 text-xs font-medium px-3 py-1 rounded-full">{loggedInBranch}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-block bg-gray-200 text-gray-600 text-xs font-medium px-3 py-1 rounded-full">{loggedInBranch}</span>
+            </div>
             <textarea value={noteContent} onChange={e => setNoteContent(e.target.value)} rows="6"
               className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none" placeholder="輸入備註內容..." autoFocus></textarea>
           </div>
