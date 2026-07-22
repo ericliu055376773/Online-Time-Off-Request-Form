@@ -6,7 +6,7 @@ import {
   ChevronLeft, List, Clock as ClockIcon, 
   Plus, X, Check, Calendar, Trash2,
   Settings, Save, Edit2, LogOut, Camera, Lock, Eye, EyeOff, ChevronDown,
-  FileText, MessageSquare, Users, BarChart3
+  FileText, MessageSquare
 } from 'lucide-react';
 
 // ==========================================
@@ -44,12 +44,11 @@ export default function App() {
   const [leaveRequests, setLeaveRequests] = useState([]);
   
   // 網站全域設定
-  // branches 格式: [{ name: '門店名', password: '密碼', employees: ['員工A', '員工B'] }]
   const defaultConfig = {
     title: '員工請假紀錄',
     branches: [],
     leaveTypes: ['事假', '病假', '特休', '公假', '喪假', '婚假', '產假', '生理假'],
-    leaveReasons: []
+    leaveReasons: ['身體不適', '家庭因素', '個人事務', '就醫/回診', '紅白事']
   };
   const [config, setConfig] = useState(defaultConfig);
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -61,65 +60,58 @@ export default function App() {
   const [newLeaveReason, setNewLeaveReason] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-  // ★ 門店登入狀態
-  const [loggedInBranch, setLoggedInBranch] = useState(null);
+  // ★ 門店登入狀態（進入網頁必須先登入）
+  const [loggedInBranch, setLoggedInBranch] = useState(null);  // 已登入的門店名稱，null = 未登入
   const [loginBranchSelected, setLoginBranchSelected] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginPasswordError, setLoginPasswordError] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // UI 狀態
-  const [activeTab, setActiveTab] = useState('leave'); // 'leave' | 'notes' | 'stats'
+  const [activeTab, setActiveTab] = useState('leave');  // ★ 'leave' | 'notes'
   const [isBackendOpen, setIsBackendOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   
-  // 管理員登入
+  // 管理員登入狀態
   const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // 後台密碼顯示
+  // 後台密碼顯示控制
   const [visiblePasswords, setVisiblePasswords] = useState({});
 
   // 編輯狀態
   const [editingId, setEditingId] = useState(null);
   const fileInputRef = useRef(null);
 
-  // ★ 備註
+  // ★ 備註狀態
   const [notes, setNotes] = useState([]);
   const [isNoteFormOpen, setIsNoteFormOpen] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
 
-  // ★ 員工管理
-  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
-  const [newEmployeeName, setNewEmployeeName] = useState('');
-  const [editingEmployeeIndex, setEditingEmployeeIndex] = useState(null);
-  const [editingEmployeeValue, setEditingEmployeeValue] = useState('');
-
   // 表單狀態
   const defaultFormData = {
-    name: '', branch: '', leaveType: '事假',
-    startDate: '', endDate: '',
-    reasonType: '', reasonDetail: '', photoBase64: ''
+    name: '',
+    branch: '',
+    leaveType: '事假',
+    startDate: '',
+    endDate: '',
+    reasonType: '',
+    reasonDetail: '',
+    photoBase64: ''
   };
   const [formData, setFormData] = useState(defaultFormData);
 
   const leaveTypes = config.leaveTypes;
   const branchNames = (config.branches || []).map(b => typeof b === 'string' ? b : b.name);
-
-  // ★ 取得目前門店的員工列表
-  const getCurrentBranchEmployees = () => {
-    if (!loggedInBranch) return [];
-    const branch = (config.branches || []).find(b => (typeof b === 'string' ? b : b.name) === loggedInBranch);
-    if (!branch || typeof branch === 'string') return [];
-    return branch.employees || [];
-  };
+  const leaveReasons = [...(config.leaveReasons || []), '其他'];
 
   const getBranchColor = (branchName) => {
     const index = branchNames.indexOf(branchName);
@@ -138,12 +130,18 @@ export default function App() {
   // ------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) { setUser(currentUser); }
-      else {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
         try {
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-          else await signInAnonymously(auth);
-        } catch (error) { console.error("登入失敗:", error); }
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        } catch (error) {
+          console.error("登入失敗:", error);
+        }
       }
     });
     return () => unsubscribe();
@@ -155,118 +153,84 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     
-    const unsubLeave = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests'), (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-      setLeaveRequests(data);
-    }, (err) => console.error("讀取請假單失敗:", err));
+    // 讀取請假單
+    const leaveCollectionRef = collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests');
+    const unsubscribeLeave = onSnapshot(leaveCollectionRef, (snapshot) => {
+      const requestsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      requestsData.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+      setLeaveRequests(requestsData);
+    }, (error) => console.error("讀取請假單失敗:", error));
 
-    const unsubNotes = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'notes'), (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => {
-        const dA = a.createdAt?.toDate?.() || new Date(a.dateTime || 0);
-        const dB = b.createdAt?.toDate?.() || new Date(b.dateTime || 0);
-        return dB - dA;
+    // ★ 讀取備註
+    const notesCollectionRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
+    const unsubscribeNotes = onSnapshot(notesCollectionRef, (snapshot) => {
+      const notesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      notesData.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(a.dateTime || 0);
+        const dateB = b.createdAt?.toDate?.() || new Date(b.dateTime || 0);
+        return dateB - dateA;  // 最新的在上面
       });
-      setNotes(data);
-    }, (err) => console.error("讀取備註失敗:", err));
+      setNotes(notesData);
+    }, (error) => console.error("讀取備註失敗:", error));
 
-    const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
+    // 讀取設定
+    const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+    const unsubscribeConfig = onSnapshot(configRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.branches && data.branches.length > 0 && typeof data.branches[0] === 'string') {
-          data.branches = data.branches.map(name => ({ name, password: '', employees: [] }));
-        }
-        // 確保每個 branch 都有 employees 陣列
-        if (data.branches) {
-          data.branches = data.branches.map(b => ({
-            ...(typeof b === 'string' ? { name: b, password: '', employees: [] } : b),
-            employees: (typeof b === 'string' ? [] : b.employees) || []
-          }));
+          data.branches = data.branches.map(name => ({ name, password: '' }));
         }
         setConfig(data);
       }
       setConfigLoaded(true);
-    }, (err) => { console.error("讀取設定失敗:", err); setConfigLoaded(true); });
+    }, (error) => {
+      console.error("讀取設定失敗:", error);
+      setConfigLoaded(true);
+    });
 
-    return () => { unsubLeave(); unsubNotes(); unsubConfig(); };
+    return () => {
+      unsubscribeLeave();
+      unsubscribeNotes();
+      unsubscribeConfig();
+    };
   }, [user]);
 
   // ------------------------------------------
-  // 門店登入
+  // ★ 門店登入邏輯（進入網頁時）
   // ------------------------------------------
   const handleBranchLogin = () => {
-    if (!loginBranchSelected) { setLoginPasswordError('請先選擇門店'); return; }
+    if (!loginBranchSelected) {
+      setLoginPasswordError('請先選擇門店');
+      return;
+    }
     const correctPwd = getBranchPassword(loginBranchSelected);
-    if (!correctPwd) { setLoggedInBranch(loginBranchSelected); return; }
-    if (loginPassword === correctPwd) { setLoggedInBranch(loginBranchSelected); setLoginPassword(''); setLoginPasswordError(''); }
-    else { setLoginPasswordError('密碼錯誤，請重新輸入'); }
-  };
-
-  const handleBranchLogout = () => {
-    setLoggedInBranch(null); setLoginBranchSelected(''); setLoginPassword('');
-    setLoginPasswordError(''); setShowLoginPassword(false); setActiveTab('leave');
-  };
-
-  // ------------------------------------------
-  // ★ 員工管理（門店級別）
-  // ------------------------------------------
-  const saveEmployeesToFirestore = async (updatedBranches) => {
-    try {
-      const configRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
-      await updateDoc(configRef, { branches: updatedBranches });
-    } catch (error) {
-      console.error("儲存員工名單失敗:", error);
+    if (!correctPwd) {
+      // 沒有設密碼的門店直接進入
+      setLoggedInBranch(loginBranchSelected);
+      setLoginPasswordError('');
+      return;
+    }
+    if (loginPassword === correctPwd) {
+      setLoggedInBranch(loginBranchSelected);
+      setLoginPasswordError('');
+      setLoginPassword('');
+    } else {
+      setLoginPasswordError('密碼錯誤，請重新輸入');
     }
   };
 
-  const handleAddEmployee = async () => {
-    if (!newEmployeeName.trim() || !loggedInBranch) return;
-    const updatedBranches = config.branches.map(b => {
-      if (b.name === loggedInBranch) {
-        return { ...b, employees: [...(b.employees || []), newEmployeeName.trim()] };
-      }
-      return b;
-    });
-    await saveEmployeesToFirestore(updatedBranches);
-    setNewEmployeeName('');
-  };
-
-  const handleDeleteEmployee = async (index) => {
-    if (!window.confirm('確定要刪除這位員工嗎？')) return;
-    const updatedBranches = config.branches.map(b => {
-      if (b.name === loggedInBranch) {
-        const emps = [...(b.employees || [])];
-        emps.splice(index, 1);
-        return { ...b, employees: emps };
-      }
-      return b;
-    });
-    await saveEmployeesToFirestore(updatedBranches);
-  };
-
-  const handleStartEditEmployee = (index, name) => {
-    setEditingEmployeeIndex(index);
-    setEditingEmployeeValue(name);
-  };
-
-  const handleSaveEditEmployee = async () => {
-    if (editingEmployeeIndex === null || !editingEmployeeValue.trim()) return;
-    const updatedBranches = config.branches.map(b => {
-      if (b.name === loggedInBranch) {
-        const emps = [...(b.employees || [])];
-        emps[editingEmployeeIndex] = editingEmployeeValue.trim();
-        return { ...b, employees: emps };
-      }
-      return b;
-    });
-    await saveEmployeesToFirestore(updatedBranches);
-    setEditingEmployeeIndex(null);
-    setEditingEmployeeValue('');
+  const handleBranchLogout = () => {
+    setLoggedInBranch(null);
+    setLoginBranchSelected('');
+    setLoginPassword('');
+    setLoginPasswordError('');
+    setShowLoginPassword(false);
+    setActiveTab('leave');
   };
 
   // ------------------------------------------
-  // 表單邏輯
+  // 處理表單與選單
   // ------------------------------------------
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -274,17 +238,26 @@ export default function App() {
   };
 
   const handleFabClick = () => {
-    if (activeTab === 'notes') { openNoteForm(); }
-    else if (activeTab === 'leave') {
+    if (activeTab === 'notes') {
+      // 備註頁的 FAB → 開啟新增備註表單
+      openNoteForm();
+    } else {
+      // 假單頁的 FAB → 開啟新增假單表單
       setFormData({ ...defaultFormData, branch: loggedInBranch });
-      setEditingId(null); setMessage({ type: '', text: '' }); setIsFormOpen(true);
+      setEditingId(null);
+      setMessage({ type: '', text: '' });
+      setIsFormOpen(true);
     }
   };
 
   const closeForm = () => {
-    setIsFormOpen(false); setFormData(defaultFormData); setEditingId(null); setMessage({ type: '', text: '' });
+    setIsFormOpen(false);
+    setFormData(defaultFormData);
+    setEditingId(null);
+    setMessage({ type: '', text: '' });
   };
 
+  // 處理照片上傳
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -298,162 +271,237 @@ export default function App() {
           img.src = event.target.result;
           img.onload = () => {
             const canvas = document.createElement('canvas');
-            let w = img.width, h = img.height;
-            if (w > h) { if (w > 800) { h *= 800 / w; w = 800; } } else { if (h > 800) { w *= 800 / h; h = 800; } }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            const MAX_WIDTH = 800, MAX_HEIGHT = 800;
+            let width = img.width, height = img.height;
+            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+            canvas.width = width; canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
             resolve(canvas.toDataURL('image/jpeg', 0.6));
           };
         };
       });
-      if (compressedBase64.length * 0.75 > 950 * 1024) setMessage({ type: 'error', text: '圖片過大，請換一張' });
-      else { setFormData(prev => ({ ...prev, photoBase64: compressedBase64 })); setMessage({ type: '', text: '' }); }
-    } catch { setMessage({ type: 'error', text: '圖片處理失敗' }); }
+      if (compressedBase64.length * 0.75 > 950 * 1024) {
+        setMessage({ type: 'error', text: '圖片過大，請換一張照片' });
+      } else {
+        setFormData(prev => ({ ...prev, photoBase64: compressedBase64 }));
+        setMessage({ type: '', text: '' });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: '圖片處理失敗，請重試' });
+    }
   };
 
-  const removePhoto = () => { setFormData(prev => ({ ...prev, photoBase64: '' })); if (fileInputRef.current) fileInputRef.current.value = ''; };
+  const removePhoto = () => {
+    setFormData(prev => ({ ...prev, photoBase64: '' }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const getReasonText = () => {
+    if (formData.reasonType === '其他') return formData.reasonDetail.trim();
+    return formData.reasonType;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.branch) { setMessage({ type: 'error', text: '請選擇分店！' }); return; }
-    if (!formData.name.trim()) { setMessage({ type: 'error', text: '請選擇員工姓名！' }); return; }
+    if (!formData.name.trim()) { setMessage({ type: 'error', text: '請輸入員工姓名！' }); return; }
     if (!formData.startDate) { setMessage({ type: 'error', text: '請選擇開始時間！' }); return; }
     if (!formData.endDate) { setMessage({ type: 'error', text: '請選擇結束時間！' }); return; }
-    if (!formData.reasonType.trim()) { setMessage({ type: 'error', text: '請輸入請假事由！' }); return; }
+    if (!formData.reasonType) { setMessage({ type: 'error', text: '請選擇請假事由！' }); return; }
+    if (formData.reasonType === '其他' && !formData.reasonDetail.trim()) { setMessage({ type: 'error', text: '請輸入請假事由說明！' }); return; }
     if (new Date(formData.endDate) <= new Date(formData.startDate)) { setMessage({ type: 'error', text: '結束時間必須晚於開始時間！' }); return; }
     if (!user) { setMessage({ type: 'error', text: '尚未連線，請稍後再試。' }); return; }
 
-    setIsSubmitting(true); setMessage({ type: '', text: '' });
+    setIsSubmitting(true);
+    setMessage({ type: '', text: '' });
+
     const saveData = {
       name: formData.name, branch: formData.branch, leaveType: formData.leaveType,
       startDate: formData.startDate, endDate: formData.endDate,
       reasonType: formData.reasonType, reasonDetail: formData.reasonDetail,
-      reason: formData.reasonType.trim(), photoBase64: formData.photoBase64
+      reason: getReasonText(), photoBase64: formData.photoBase64
     };
+
     try {
-      if (editingId) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', editingId), { ...saveData, updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests'), { ...saveData, status: '待審核', createdAt: serverTimestamp() });
+      if (editingId) {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', editingId), { ...saveData, updatedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests'), { ...saveData, status: '待審核', createdAt: serverTimestamp() });
+      }
       closeForm();
-    } catch { setMessage({ type: 'error', text: '儲存失敗' }); }
-    finally { setIsSubmitting(false); }
+    } catch (error) {
+      setMessage({ type: 'error', text: '儲存失敗，請重試' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleEdit = (req) => {
-    setFormData({ name: req.name, branch: req.branch, leaveType: req.leaveType, startDate: req.startDate, endDate: req.endDate, reasonType: req.reasonType || req.reason || '', reasonDetail: req.reasonDetail || '', photoBase64: req.photoBase64 || '' });
-    setEditingId(req.id); setMessage({ type: '', text: '' }); setIsFormOpen(true);
+    setFormData({
+      name: req.name, branch: req.branch, leaveType: req.leaveType,
+      startDate: req.startDate, endDate: req.endDate,
+      reasonType: req.reasonType || req.reason || '', reasonDetail: req.reasonDetail || '',
+      photoBase64: req.photoBase64 || ''
+    });
+    setEditingId(req.id);
+    setMessage({ type: '', text: '' });
+    setIsFormOpen(true);
   };
 
   const handleDelete = async (id) => {
-    if (!user || !window.confirm('確定要刪除這筆請假紀錄嗎？')) return;
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', id)); } catch {}
+    if (!user) return;
+    if (!window.confirm('確定要刪除這筆請假紀錄嗎？')) return;
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', id)); } catch (error) { console.error("刪除失敗:", error); }
   };
 
   // ------------------------------------------
-  // 備註
+  // ★ 備註功能
   // ------------------------------------------
   const getNowDateTimeString = () => {
-    const now = new Date(); const p = (n) => String(n).padStart(2, '0');
-    return `${now.getFullYear()}/${p(now.getMonth() + 1)}/${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`;
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   };
 
   const openNoteForm = (note = null) => {
-    if (note) { setNoteContent(note.content); setEditingNoteId(note.id); }
-    else { setNoteContent(''); setEditingNoteId(null); }
+    if (note) {
+      setNoteContent(note.content);
+      setEditingNoteId(note.id);
+    } else {
+      setNoteContent('');
+      setEditingNoteId(null);
+    }
     setIsNoteFormOpen(true);
   };
-  const closeNoteForm = () => { setIsNoteFormOpen(false); setNoteContent(''); setEditingNoteId(null); };
+
+  const closeNoteForm = () => {
+    setIsNoteFormOpen(false);
+    setNoteContent('');
+    setEditingNoteId(null);
+  };
 
   const handleNoteSubmit = async () => {
-    if (!noteContent.trim() || !user) return;
+    if (!noteContent.trim()) return;
+    if (!user) return;
     setIsSubmittingNote(true);
     try {
-      if (editingNoteId) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', editingNoteId), { content: noteContent.trim(), updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'notes'), { content: noteContent.trim(), branch: loggedInBranch, dateTime: getNowDateTimeString(), createdAt: serverTimestamp() });
+      if (editingNoteId) {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', editingNoteId), {
+          content: noteContent.trim(),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'notes'), {
+          content: noteContent.trim(),
+          branch: loggedInBranch,
+          dateTime: getNowDateTimeString(),
+          createdAt: serverTimestamp()
+        });
+      }
       closeNoteForm();
-    } catch {} finally { setIsSubmittingNote(false); }
+    } catch (error) {
+      console.error("備註儲存失敗:", error);
+    } finally {
+      setIsSubmittingNote(false);
+    }
   };
 
   const handleDeleteNote = async (id) => {
-    if (!user || !window.confirm('確定要刪除這筆備註嗎？')) return;
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id)); } catch {}
+    if (!user) return;
+    if (!window.confirm('確定要刪除這筆備註嗎？')) return;
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id)); } catch (error) { console.error("刪除備註失敗:", error); }
   };
 
   // ------------------------------------------
-  // ★ 本月請假統計
-  // ------------------------------------------
-  const getMonthlyStats = () => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-
-    // 篩選當月 & 目前門店的請假紀錄
-    const monthlyRequests = leaveRequests.filter(req => {
-      if (loggedInBranch && loggedInBranch !== '__admin__' && req.branch !== loggedInBranch) return false;
-      const startDate = new Date(req.startDate);
-      return startDate.getFullYear() === currentYear && startDate.getMonth() === currentMonth;
-    });
-
-    // 依員工分組統計
-    const statsMap = {};
-    monthlyRequests.forEach(req => {
-      const name = req.name || '未知';
-      if (!statsMap[name]) statsMap[name] = { count: 0, types: {} };
-      statsMap[name].count += 1;
-      const t = req.leaveType || '其他';
-      statsMap[name].types[t] = (statsMap[name].types[t] || 0) + 1;
-    });
-
-    // 轉為陣列並按次數排序
-    return Object.entries(statsMap)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.count - a.count);
-  };
-
-  // ------------------------------------------
-  // 管理員後台
+  // 管理員後台邏輯
   // ------------------------------------------
   const handleAdminLogin = async (e) => {
-    e.preventDefault(); setIsLoggingIn(true); setLoginError('');
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
     try {
       await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
-      setShowAdminLoginModal(false); setIsBackendOpen(true); setLoggedInBranch('__admin__');
-      setAdminEmail(''); setAdminPassword('');
-    } catch { setLoginError('信箱或密碼錯誤！'); }
-    finally { setIsLoggingIn(false); }
+      setShowAdminLoginModal(false);
+      setIsBackendOpen(true);
+      setLoggedInBranch('__admin__');  // 管理員也視為已登入
+      setAdminEmail('');
+      setAdminPassword('');
+    } catch (error) {
+      setLoginError('信箱或密碼錯誤，請檢查後重試！');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
-  const handleAdminLogout = async () => { await signOut(auth); setIsBackendOpen(false); setLoggedInBranch(null); };
+  const handleAdminLogout = async () => {
+    await signOut(auth);
+    setIsBackendOpen(false);
+    setLoggedInBranch(null);
+  };
 
-  const handleOpenSettings = () => { setDraftConfig(JSON.parse(JSON.stringify(config))); setIsSettingsMode(true); setVisiblePasswords({}); };
+  const handleOpenSettings = () => {
+    setDraftConfig(JSON.parse(JSON.stringify(config)));
+    setIsSettingsMode(true);
+    setVisiblePasswords({});
+  };
 
   const handleSaveConfig = async () => {
     setIsSavingConfig(true);
-    try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), draftConfig); setIsSettingsMode(false); }
-    catch {} finally { setIsSavingConfig(false); }
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), draftConfig);
+      setIsSettingsMode(false);
+    } catch (error) {
+      console.error("儲存設定失敗:", error);
+    } finally {
+      setIsSavingConfig(false);
+    }
   };
 
   const handleAddBranch = () => {
     if (!newBranch.trim() || !newBranchPassword.trim()) return;
-    setDraftConfig(prev => ({ ...prev, branches: [...prev.branches, { name: newBranch.trim(), password: newBranchPassword.trim(), employees: [] }] }));
+    setDraftConfig(prev => ({ ...prev, branches: [...prev.branches, { name: newBranch.trim(), password: newBranchPassword.trim() }] }));
     setNewBranch(''); setNewBranchPassword('');
   };
-  const handleUpdateBranchPassword = (i, v) => { setDraftConfig(prev => { const u = [...prev.branches]; u[i] = { ...u[i], password: v }; return { ...prev, branches: u }; }); };
-  const handleUpdateBranchName = (i, v) => { setDraftConfig(prev => { const u = [...prev.branches]; u[i] = { ...u[i], name: v }; return { ...prev, branches: u }; }); };
-  const handleRemoveArrayItem = (field, index) => { setDraftConfig(prev => { const a = [...prev[field]]; a.splice(index, 1); return { ...prev, [field]: a }; }); };
-  const handleAddLeaveReason = () => { if (!newLeaveReason.trim()) return; setDraftConfig(prev => ({ ...prev, leaveReasons: [...(prev.leaveReasons || []), newLeaveReason.trim()] })); setNewLeaveReason(''); };
-  const handleRemoveLeaveReason = (i) => { setDraftConfig(prev => { const a = [...(prev.leaveReasons || [])]; a.splice(i, 1); return { ...prev, leaveReasons: a }; }); };
-  const togglePasswordVisibility = (i) => { setVisiblePasswords(prev => ({ ...prev, [i]: !prev[i] })); };
+
+  const handleUpdateBranchPassword = (index, newPwd) => {
+    setDraftConfig(prev => { const u = [...prev.branches]; u[index] = { ...u[index], password: newPwd }; return { ...prev, branches: u }; });
+  };
+
+  const handleUpdateBranchName = (index, newName) => {
+    setDraftConfig(prev => { const u = [...prev.branches]; u[index] = { ...u[index], name: newName }; return { ...prev, branches: u }; });
+  };
+
+  const handleRemoveArrayItem = (field, index) => {
+    setDraftConfig(prev => { const a = [...prev[field]]; a.splice(index, 1); return { ...prev, [field]: a }; });
+  };
+
+  const handleAddLeaveReason = () => {
+    if (!newLeaveReason.trim()) return;
+    setDraftConfig(prev => ({ ...prev, leaveReasons: [...(prev.leaveReasons || []), newLeaveReason.trim()] }));
+    setNewLeaveReason('');
+  };
+
+  const handleRemoveLeaveReason = (index) => {
+    setDraftConfig(prev => { const a = [...(prev.leaveReasons || [])]; a.splice(index, 1); return { ...prev, leaveReasons: a }; });
+  };
 
   const calculateDuration = (start, end) => {
     if (!start || !end) return '';
-    const h = (new Date(end) - new Date(start)) / 3600000;
-    return h < 1 ? '小於 1 小時' : `${Math.round(h * 10) / 10} 小時`;
+    const diffHrs = (new Date(end) - new Date(start)) / (1000 * 60 * 60);
+    if (diffHrs < 1) return '小於 1 小時';
+    return `${Math.round(diffHrs * 10) / 10} 小時`;
+  };
+
+  const togglePasswordVisibility = (index) => {
+    setVisiblePasswords(prev => ({ ...prev, [index]: !prev[index] }));
   };
 
   // ==========================================
   // 3. 渲染
   // ==========================================
 
+  // ★ 未載入設定時顯示載入中
   if (!configLoaded) {
     return (
       <div className="min-h-[100dvh] bg-gray-100 flex justify-center font-sans">
@@ -464,12 +512,14 @@ export default function App() {
     );
   }
 
-  // ★ 門店登入畫面
+  // ★ 門店登入畫面（未登入時顯示）
   if (!loggedInBranch) {
     return (
       <div className="min-h-[100dvh] bg-gray-100 flex justify-center font-sans">
         <div className="w-full max-w-[400px] bg-[#f8f9fa] relative shadow-2xl flex flex-col h-[100dvh] overflow-hidden text-gray-800">
+          
           <div className="flex-1 flex flex-col items-center justify-center px-8">
+            {/* Logo / 標題 */}
             <div className="w-16 h-16 bg-[#333333] rounded-2xl flex items-center justify-center mb-6 shadow-lg">
               <FileText className="w-8 h-8 text-white" />
             </div>
@@ -483,11 +533,15 @@ export default function App() {
               </div>
             ) : (
               <div className="w-full space-y-4">
+                {/* 門店選擇 */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">選擇門店</label>
                   <div className="relative">
-                    <select value={loginBranchSelected} onChange={(e) => { setLoginBranchSelected(e.target.value); setLoginPasswordError(''); setLoginPassword(''); }}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none shadow-sm">
+                    <select 
+                      value={loginBranchSelected} 
+                      onChange={(e) => { setLoginBranchSelected(e.target.value); setLoginPasswordError(''); setLoginPassword(''); }}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none shadow-sm"
+                    >
                       <option value="">請選擇門店</option>
                       {branchNames.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
@@ -495,15 +549,22 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 密碼輸入 */}
                 {loginBranchSelected && getBranchPassword(loginBranchSelected) && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">門店密碼</label>
                     <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><Lock className="w-4 h-4" /></div>
-                      <input type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <input 
+                        type={showLoginPassword ? 'text' : 'password'}
+                        value={loginPassword}
                         onChange={e => { setLoginPassword(e.target.value); setLoginPasswordError(''); }}
                         onKeyDown={e => e.key === 'Enter' && handleBranchLogin()}
-                        className="w-full bg-white border border-gray-200 rounded-xl pl-11 pr-11 py-3.5 text-sm font-medium text-gray-800 outline-none shadow-sm" placeholder="請輸入門店密碼" />
+                        className="w-full bg-white border border-gray-200 rounded-xl pl-11 pr-11 py-3.5 text-sm font-medium text-gray-800 outline-none shadow-sm"
+                        placeholder="請輸入門店密碼"
+                      />
                       <button onClick={() => setShowLoginPassword(!showLoginPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                         {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -511,17 +572,30 @@ export default function App() {
                   </div>
                 )}
 
-                {loginPasswordError && <p className="text-xs text-red-500 font-medium bg-red-50 px-3 py-2 rounded-lg">{loginPasswordError}</p>}
+                {loginPasswordError && (
+                  <p className="text-xs text-red-500 font-medium bg-red-50 px-3 py-2 rounded-lg">{loginPasswordError}</p>
+                )}
 
-                <button onClick={handleBranchLogin} disabled={!loginBranchSelected}
-                  className="w-full bg-[#333333] hover:bg-black disabled:bg-gray-300 text-white py-3.5 rounded-xl font-bold tracking-wide transition shadow-lg mt-2">
+                {/* 登入按鈕 */}
+                <button 
+                  onClick={handleBranchLogin}
+                  disabled={!loginBranchSelected}
+                  className="w-full bg-[#333333] hover:bg-black disabled:bg-gray-300 text-white py-3.5 rounded-xl font-bold tracking-wide transition shadow-lg mt-2"
+                >
                   進入系統
                 </button>
               </div>
             )}
           </div>
+
+          {/* 底部管理員入口 */}
           <div className="px-8 pb-10 pt-4">
-            <button onClick={() => setShowAdminLoginModal(true)} className="w-full text-center text-xs text-gray-400 hover:text-gray-600 transition py-3">管理員登入</button>
+            <button 
+              onClick={() => setShowAdminLoginModal(true)}
+              className="w-full text-center text-xs text-gray-400 hover:text-gray-600 transition py-3"
+            >
+              管理員登入
+            </button>
           </div>
 
           {/* 管理員登入 Modal */}
@@ -535,14 +609,16 @@ export default function App() {
                 <form onSubmit={handleAdminLogin} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">電子郵件</label>
-                    <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="admin@example.com" required />
+                    <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gray-300 transition" placeholder="admin@example.com" required />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">密碼</label>
-                    <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="請輸入密碼" required />
+                    <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gray-300 transition" placeholder="請輸入密碼" required />
                   </div>
                   {loginError && <p className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded">{loginError}</p>}
-                  <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">{isLoggingIn ? '登入中...' : '確認登入'}</button>
+                  <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">
+                    {isLoggingIn ? '登入中...' : '確認登入'}
+                  </button>
                 </form>
               </div>
             </div>
@@ -552,45 +628,47 @@ export default function App() {
     );
   }
 
-  // ★ 統計資料
-  const monthlyStats = getMonthlyStats();
-  const now = new Date();
-  const currentMonthLabel = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
-  const employees = getCurrentBranchEmployees();
-
   // ==========================================
-  // ★ 已登入主介面
+  // ★ 已登入後的主介面
   // ==========================================
   return (
     <div className="min-h-[100dvh] bg-gray-100 flex justify-center font-sans">
       <div className="w-full max-w-[400px] bg-[#f8f9fa] relative shadow-2xl flex flex-col h-[100dvh] overflow-hidden text-gray-800">
         
-        {/* 頂部 */}
+        {/* 頂部導航列 */}
         <header className="flex justify-between items-center px-6 pt-12 pb-4 bg-[#f8f9fa] z-10">
           <div className="flex items-center gap-2">
             <div className={`w-2.5 h-2.5 rounded-full ${isBackendOpen ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-            <span className="text-xs text-gray-400 font-medium">{isBackendOpen ? '管理員' : loggedInBranch}</span>
+            <span className="text-xs text-gray-400 font-medium">
+              {isBackendOpen ? '管理員' : loggedInBranch}
+            </span>
           </div>
-          <h1 className="text-xl font-bold tracking-wide text-gray-900 cursor-pointer hover:opacity-60 transition-opacity select-none"
+          <h1 
+            className="text-xl font-bold tracking-wide text-gray-900 cursor-pointer hover:opacity-60 transition-opacity select-none"
             onClick={() => { 
-              if (isBackendOpen) { setIsBackendOpen(false); setIsSettingsMode(false); }
-              else if (user && user.email) { setIsBackendOpen(true); }
-              else { setShowAdminLoginModal(true); }
-            }}>{config.title}</h1>
-          <div className="flex items-center gap-2">
-            {/* ★ 員工管理按鈕 */}
-            {!isBackendOpen && (
-              <button onClick={() => { setIsEmployeeModalOpen(true); setEditingEmployeeIndex(null); setNewEmployeeName(''); }}
-                className="text-gray-400 hover:text-gray-700 transition p-1"><Users className="w-4 h-4" /></button>
-            )}
-            <button onClick={isBackendOpen ? handleAdminLogout : handleBranchLogout} className="text-xs text-gray-400 hover:text-red-500 transition font-medium">登出</button>
-          </div>
+              if (isBackendOpen) {
+                setIsBackendOpen(false); 
+                setIsSettingsMode(false);
+              } else {
+                if (user && user.email) {
+                  setIsBackendOpen(true);
+                } else {
+                  setShowAdminLoginModal(true);
+                }
+              }
+            }}
+          >
+            {config.title}
+          </h1>
+          <button onClick={isBackendOpen ? handleAdminLogout : handleBranchLogout} className="text-xs text-gray-400 hover:text-red-500 transition font-medium">
+            登出
+          </button>
         </header>
 
-        {/* 內容 */}
+        {/* 內容區域 */}
         {isBackendOpen ? (
           // ==============================
-          // 後台
+          // 後台介面
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-white rounded-t-3xl shadow-inner mt-2">
             {isSettingsMode ? (
@@ -601,32 +679,31 @@ export default function App() {
                   <div className="w-6"></div>
                 </div>
 
+                {/* 系統標題 */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">系統標題文字</label>
-                  <input type="text" value={draftConfig.title} onChange={(e) => setDraftConfig(prev => ({ ...prev, title: e.target.value }))} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                  <input type="text" value={draftConfig.title} onChange={(e) => setDraftConfig(prev => ({ ...prev, title: e.target.value }))} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none transition" />
                 </div>
 
+                {/* 分店名單管理 */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">分店名單管理</label>
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
                     {(draftConfig.branches || []).map((b, i) => {
-                      const obj = typeof b === 'string' ? { name: b, password: '' } : b;
-                      const vis = visiblePasswords[i];
+                      const branchObj = typeof b === 'string' ? { name: b, password: '' } : b;
+                      const isVisible = visiblePasswords[i];
                       return (
                         <div key={i} className="bg-white px-3 py-3 rounded-lg border border-gray-100 shadow-sm space-y-2">
                           <div className="flex justify-between items-center">
-                            <input type="text" value={obj.name} onChange={(e) => handleUpdateBranchName(i, e.target.value)} className="text-sm font-medium text-gray-700 bg-transparent outline-none flex-1 mr-2" />
+                            <input type="text" value={branchObj.name} onChange={(e) => handleUpdateBranchName(i, e.target.value)} className="text-sm font-medium text-gray-700 bg-transparent outline-none flex-1 mr-2" />
                             <button onClick={() => handleRemoveArrayItem('branches', i)} className="text-gray-300 hover:text-red-500 transition shrink-0"><Trash2 className="w-4 h-4" /></button>
                           </div>
                           <div className="flex items-center gap-2">
                             <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            <input type={vis ? 'text' : 'password'} value={obj.password} onChange={(e) => handleUpdateBranchPassword(i, e.target.value)} className="flex-1 text-xs bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 outline-none" placeholder="設定密碼" />
-                            <button onClick={() => togglePasswordVisibility(i)} className="text-gray-400 hover:text-gray-600 shrink-0">{vis ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
-                          </div>
-                          {/* 顯示員工數量 */}
-                          <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                            <Users className="w-3 h-3" />
-                            <span>員工 {(obj.employees || []).length} 人</span>
+                            <input type={isVisible ? 'text' : 'password'} value={branchObj.password} onChange={(e) => handleUpdateBranchPassword(i, e.target.value)} className="flex-1 text-xs bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 outline-none" placeholder="設定門店密碼" />
+                            <button onClick={() => togglePasswordVisibility(i)} className="text-gray-400 hover:text-gray-600 transition shrink-0">
+                              {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
                           </div>
                         </div>
                       );
@@ -644,6 +721,7 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 假別清單管理 */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">假別清單管理</label>
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
@@ -660,6 +738,27 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 請假事由選項管理 */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">請假事由選項管理</label>
+                  <p className="text-[11px] text-gray-400 ml-1">系統會自動在最後加上「其他」選項</p>
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2">
+                    {(draftConfig.leaveReasons || []).map((r, i) => (
+                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-gray-100 shadow-sm">
+                        <span className="text-sm font-medium text-gray-700">{r}</span>
+                        <button onClick={() => handleRemoveLeaveReason(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center bg-gray-100 px-3 py-2.5 rounded-lg border border-dashed border-gray-200">
+                      <span className="text-sm font-medium text-gray-400">其他（系統自動加入）</span>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <input type="text" value={newLeaveReason} onChange={e => setNewLeaveReason(e.target.value)} placeholder="輸入新事由選項..." className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
+                      <button onClick={handleAddLeaveReason} className="bg-[#333333] text-white px-4 rounded-lg hover:bg-black transition">新增</button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pt-4 pb-10">
                   <button onClick={handleSaveConfig} disabled={isSavingConfig} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-bold tracking-wide transition shadow-lg shadow-blue-600/20 flex justify-center items-center gap-2">
                     {isSavingConfig ? '儲存中...' : <><Save className="w-5 h-5"/> 儲存設定</>}
@@ -668,13 +767,16 @@ export default function App() {
               </div>
             ) : (
               <>
-                <h2 className="text-lg font-bold text-gray-800 mb-6 flex justify-between items-center">管理員後台 <div className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">已登入</div></h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-6 flex justify-between items-center">
+                  管理員後台
+                  <div className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">已登入</div>
+                </h2>
                 <div className="space-y-4">
-                  <button onClick={handleOpenSettings} className="w-full bg-gray-50 p-5 rounded-2xl border border-gray-100 flex items-center gap-4 hover:bg-gray-100 transition-all active:scale-[0.98]">
+                  <button onClick={handleOpenSettings} className="w-full bg-gray-50 p-5 rounded-2xl border border-gray-100 flex items-center gap-4 hover:bg-gray-100 hover:shadow-sm transition-all active:scale-[0.98]">
                     <div className="bg-white p-3 rounded-full shadow-sm"><Settings className="w-6 h-6 text-gray-700" /></div>
                     <span className="text-[15px] font-bold text-gray-800 tracking-wide">系統設定</span>
                   </button>
-                  <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 transition-all active:scale-[0.98]">
+                  <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 hover:shadow-sm transition-all active:scale-[0.98]">
                     <div className="bg-white p-3 rounded-full shadow-sm text-red-500"><LogOut className="w-6 h-6" /></div>
                     <span className="text-[15px] font-bold text-red-600 tracking-wide">登出管理員帳號</span>
                   </button>
@@ -684,11 +786,11 @@ export default function App() {
           </div>
         ) : (
           // ==============================
-          // 前台（三個分頁）
+          // 前台介面（假單總覽 / 備註 切換）
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 pb-32 pt-4">
             {activeTab === 'leave' ? (
-              /* --- 假單總覽 --- */
+              // --- 假單總覽 ---
               <div className="mb-4">
                 {leaveRequests.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">目前沒有任何請假紀錄</div>
@@ -708,12 +810,27 @@ export default function App() {
                             </div>
                           </div>
                           <div className="space-y-1.5 mb-3">
-                            <div className="flex items-center text-xs text-gray-400"><Calendar className="w-3.5 h-3.5 mr-2 shrink-0" /><span className="truncate">{new Date(req.startDate).toLocaleDateString('zh-TW')} - {new Date(req.endDate).toLocaleDateString('zh-TW')}</span></div>
-                            <div className="flex items-center text-xs text-gray-400"><ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" /><span>時長：{calculateDuration(req.startDate, req.endDate)} ({req.leaveType})</span></div>
+                            <div className="flex items-center text-xs text-gray-400">
+                              <Calendar className="w-3.5 h-3.5 mr-2 shrink-0" />
+                              <span className="truncate">{new Date(req.startDate).toLocaleDateString('zh-TW')} - {new Date(req.endDate).toLocaleDateString('zh-TW')}</span>
+                            </div>
+                            <div className="flex items-center text-xs text-gray-400">
+                              <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
+                              <span>時長：{calculateDuration(req.startDate, req.endDate)} ({req.leaveType})</span>
+                            </div>
                           </div>
-                          {req.photoBase64 && (<div className="mb-3 rounded-lg overflow-hidden border border-gray-100 max-h-32 bg-gray-50 flex justify-center"><img src={req.photoBase64} alt="" className="object-cover h-full w-full" /></div>)}
+                          {req.photoBase64 && (
+                            <div className="mb-3 rounded-lg overflow-hidden border border-gray-100 max-h-32 bg-gray-50 flex justify-center">
+                              <img src={req.photoBase64} alt="Attached" className="object-cover h-full w-full" />
+                            </div>
+                          )}
                           <div className="bg-gray-50/80 p-2.5 rounded-lg border border-gray-50">
-                            <p className="text-[13px] text-gray-600 leading-relaxed break-words">{req.reason || req.reasonType || ''}</p>
+                            <p className="text-[13px] text-gray-600 leading-relaxed break-words">
+                              {req.reasonType && req.reasonType !== '其他' && (
+                                <span className="inline-block bg-gray-200 text-gray-600 text-[11px] font-medium px-2 py-0.5 rounded-full mr-1.5 align-middle">{req.reasonType}</span>
+                              )}
+                              {req.reasonType === '其他' ? req.reasonDetail || req.reason : (req.reason || req.reasonType || '')}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -721,8 +838,8 @@ export default function App() {
                   </div>
                 )}
               </div>
-            ) : activeTab === 'notes' ? (
-              /* --- 備註 --- */
+            ) : (
+              // --- ★ 備註頁面 ---
               <div className="mb-4">
                 {notes.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">
@@ -735,68 +852,31 @@ export default function App() {
                     {notes.map((note) => (
                       <div key={note.id} className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-4">
                         <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-400"><Calendar className="w-3.5 h-3.5" /><span>{note.dateTime}</span></div>
+                          <div className="flex items-center gap-2 text-xs text-gray-400">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>{note.dateTime}</span>
+                          </div>
                           <div className="flex items-center gap-2.5">
                             <button onClick={() => openNoteForm(note)} className="text-gray-300 hover:text-blue-500 transition"><Edit2 className="w-4 h-4" /></button>
                             <button onClick={() => handleDeleteNote(note.id)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
-                        {note.branch && <div className="mb-2"><span className="inline-block bg-gray-200 text-gray-600 text-[11px] font-medium px-2 py-0.5 rounded-full">{note.branch}</span></div>}
+                        {note.branch && (
+                          <div className="mb-2">
+                            <span className="inline-block bg-gray-200 text-gray-600 text-[11px] font-medium px-2 py-0.5 rounded-full">{note.branch}</span>
+                          </div>
+                        )}
                         <p className="text-[13px] text-gray-700 leading-relaxed break-words whitespace-pre-wrap">{note.content}</p>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            ) : (
-              /* --- ★ 本月統計 --- */
-              <div className="mb-4">
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-5 mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-gray-800">本月請假統計</h3>
-                    <span className="text-xs text-gray-400 font-medium">{currentMonthLabel}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-4">{loggedInBranch} · 共 {monthlyStats.reduce((s, e) => s + e.count, 0)} 筆</p>
-
-                  {monthlyStats.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-sm">
-                      <BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                      <p>本月尚無請假紀錄</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {monthlyStats.map((emp, i) => {
-                        const maxCount = monthlyStats[0]?.count || 1;
-                        const barWidth = Math.max((emp.count / maxCount) * 100, 15);
-                        return (
-                          <div key={i}>
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-sm font-bold text-gray-800">{emp.name}</span>
-                              <span className="text-sm font-bold text-gray-900">{emp.count} 次</span>
-                            </div>
-                            {/* 長條圖 */}
-                            <div className="w-full bg-gray-100 rounded-full h-6 overflow-hidden">
-                              <div className="h-full bg-gray-800 rounded-full flex items-center transition-all duration-500 ease-out" style={{ width: `${barWidth}%` }}>
-                              </div>
-                            </div>
-                            {/* 假別明細 */}
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {Object.entries(emp.types).map(([type, count]) => (
-                                <span key={type} className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{type} {count}</span>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
             )}
           </div>
         )}
 
-        {/* 管理員登入 Modal */}
+        {/* 管理員登入 Modal（主介面中也可能觸發） */}
         {showAdminLoginModal && (
           <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={() => setShowAdminLoginModal(false)}>
             <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -805,96 +885,54 @@ export default function App() {
                 <button onClick={() => setShowAdminLoginModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
               </div>
               <form onSubmit={handleAdminLogin} className="space-y-4">
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">電子郵件</label><input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="admin@example.com" required /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">密碼</label><input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none" placeholder="請輸入密碼" required /></div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">電子郵件</label>
+                  <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gray-300 transition" placeholder="admin@example.com" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">密碼</label>
+                  <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-gray-300 transition" placeholder="請輸入密碼" required />
+                </div>
                 {loginError && <p className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded">{loginError}</p>}
-                <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">{isLoggingIn ? '登入中...' : '確認登入'}</button>
+                <button type="submit" disabled={isLoggingIn} className="w-full bg-[#333333] hover:bg-black text-white py-3.5 rounded-xl font-bold transition shadow-lg mt-2">
+                  {isLoggingIn ? '登入中...' : '確認登入'}
+                </button>
               </form>
             </div>
           </div>
         )}
 
-        {/* ★ 員工管理 Modal */}
-        {isEmployeeModalOpen && (
-          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-end justify-center" onClick={() => setIsEmployeeModalOpen(false)}>
-            <div className="bg-white rounded-t-3xl w-full max-w-[400px] shadow-2xl max-h-[75%] flex flex-col" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
-                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-gray-600" />{loggedInBranch} 員工管理</h3>
-                <button onClick={() => setIsEmployeeModalOpen(false)} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X className="w-5 h-5" /></button>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                {employees.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400 text-sm">
-                    <Users className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                    <p>尚未新增任何員工</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {employees.map((emp, i) => (
-                      <div key={i} className="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-xl border border-gray-100">
-                        {editingEmployeeIndex === i ? (
-                          <>
-                            <input type="text" value={editingEmployeeValue} onChange={e => setEditingEmployeeValue(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && handleSaveEditEmployee()}
-                              className="flex-1 text-sm font-medium bg-white border border-gray-200 rounded-lg px-3 py-1.5 outline-none" autoFocus />
-                            <button onClick={handleSaveEditEmployee} className="text-green-500 hover:text-green-700 transition"><Check className="w-4 h-4" /></button>
-                            <button onClick={() => setEditingEmployeeIndex(null)} className="text-gray-400 hover:text-gray-600 transition"><X className="w-4 h-4" /></button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="flex-1 text-sm font-medium text-gray-700">{emp}</span>
-                            <button onClick={() => handleStartEditEmployee(i, emp)} className="text-gray-300 hover:text-blue-500 transition"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteEmployee(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="px-6 py-4 border-t border-gray-100 pb-8">
-                <div className="flex gap-2">
-                  <input type="text" value={newEmployeeName} onChange={e => setNewEmployeeName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddEmployee()}
-                    placeholder="輸入新員工姓名..." className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none" />
-                  <button onClick={handleAddEmployee} disabled={!newEmployeeName.trim()}
-                    className="bg-[#333333] hover:bg-black disabled:bg-gray-300 text-white px-5 rounded-xl font-bold transition text-sm">新增</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* FAB */}
-        {!isBackendOpen && activeTab !== 'stats' && (
-          <button onClick={handleFabClick}
-            className="absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 bg-[#333333] text-white hover:bg-black active:scale-95">
+        {/* 浮動操作按鈕（假單和備註共用，不在後台顯示） */}
+        {!isBackendOpen && (
+          <button 
+            onClick={handleFabClick}
+            className="absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 bg-[#333333] text-white hover:bg-black active:scale-95"
+          >
             <Plus className="w-7 h-7" />
           </button>
         )}
 
-        {/* ★ 底部導航列（三個分頁） */}
-        <nav className="absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8">
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('leave'); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            <List className="w-4 h-4" />
-            <span className="text-[13px] font-medium">假單總覽</span>
+        {/* ★ 底部導航列（假單總覽 + 備註） */}
+        <nav className="absolute bottom-0 w-full bg-white px-6 py-4 flex justify-center items-center gap-3 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8">
+          <div 
+            onClick={() => { setIsBackendOpen(false); setActiveTab('leave'); }}
+            className={`flex-1 px-4 py-3 rounded-full flex items-center justify-center gap-2 shadow-md cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white hover:bg-black' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+          >
+            <List className="w-5 h-5" />
+            <span className="text-sm font-medium tracking-wider">假單總覽</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'notes' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-[13px] font-medium">備註</span>
-          </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'stats' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            <BarChart3 className="w-4 h-4" />
-            <span className="text-[13px] font-medium">統計</span>
+          <div 
+            onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); }}
+            className={`flex-1 px-4 py-3 rounded-full flex items-center justify-center gap-2 shadow-md cursor-pointer transition ${activeTab === 'notes' && !isBackendOpen ? 'bg-[#333333] text-white hover:bg-black' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span className="text-sm font-medium tracking-wider">備註</span>
           </div>
         </nav>
 
-        {/* 假單表單 Modal */}
+        {/* =========================================
+            填寫假單 Modal
+            ========================================= */}
         <div className={`absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-400 ease-out h-[90%] flex flex-col ${isFormOpen ? 'translate-y-0' : 'translate-y-full'}`}>
           <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-800">{editingId ? '編輯請假單' : '填寫請假單'}</h2>
@@ -909,35 +947,16 @@ export default function App() {
                   {branchNames.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
-
-              {/* ★ 員工姓名下拉選單 */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">員工姓名</label>
-                {employees.length > 0 ? (
-                  <div className="relative">
-                    <select name="name" value={formData.name} onChange={handleInputChange}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
-                      <option value="" disabled>請選擇員工</option>
-                      {employees.map(emp => <option key={emp} value={emp}>{emp}</option>)}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                ) : (
-                  <div>
-                    <input type="text" name="name" value={formData.name} onChange={handleInputChange}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" placeholder="輸入姓名（請先至員工管理新增）" />
-                    <p className="text-[11px] text-amber-500 mt-1 ml-1">尚未新增員工名單，請點擊右上角 👥 管理員工</p>
-                  </div>
-                )}
+                <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" placeholder="輸入您的姓名" />
               </div>
-
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">請假類別</label>
                 <select name="leaveType" value={formData.leaveType} onChange={handleInputChange} className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
                   {leaveTypes.map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">開始時間</label>
@@ -948,29 +967,39 @@ export default function App() {
                   <input type="datetime-local" name="endDate" value={formData.endDate} onChange={handleInputChange} className="w-full bg-gray-50 border-none rounded-xl px-3 py-3.5 text-xs font-medium text-gray-800 outline-none" />
                 </div>
               </div>
-
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">請假事由</label>
-                <textarea name="reasonType" rows="3" value={formData.reasonType} onChange={handleInputChange} className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none" placeholder="請輸入請假原因..."></textarea>
+                <div className="relative">
+                  <select name="reasonType" value={formData.reasonType} onChange={handleInputChange} className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
+                    <option value="" disabled>請選擇請假事由</option>
+                    {leaveReasons.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                {formData.reasonType === '其他' && (
+                  <textarea name="reasonDetail" rows="2" value={formData.reasonDetail} onChange={handleInputChange} className="w-full bg-gray-50 border-2 border-amber-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none resize-none mt-2" placeholder="請輸入具體請假原因..."></textarea>
+                )}
               </div>
-
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-red-500 uppercase tracking-wider ml-1">附加照片 (非必填)</label>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">附加照片 (非必填)</label>
                 {formData.photoBase64 ? (
                   <div className="relative w-full h-32 rounded-xl overflow-hidden border border-gray-200">
-                    <img src={formData.photoBase64} alt="" className="w-full h-full object-cover" />
+                    <img src={formData.photoBase64} alt="Preview" className="w-full h-full object-cover" />
                     <button type="button" onClick={removePhoto} className="absolute top-2 right-2 bg-gray-900/60 text-white p-1.5 rounded-full hover:bg-gray-900 transition"><X className="w-4 h-4" /></button>
                   </div>
                 ) : (
                   <label className="flex flex-col items-center justify-center w-full h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition">
-                    <Camera className="w-6 h-6 text-gray-400 mb-2" />
-                    <p className="text-xs text-gray-500 font-medium">點擊拍照或上傳</p>
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Camera className="w-6 h-6 text-gray-400 mb-2" />
+                      <p className="text-xs text-gray-500 font-medium">點擊拍照或上傳</p>
+                    </div>
                     <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
                   </label>
                 )}
               </div>
-
-              {message.text && (<div className={`text-xs font-medium p-3 rounded-lg ${message.type === 'error' ? 'text-red-600 bg-red-50' : message.type === 'info' ? 'text-blue-600 bg-blue-50' : 'text-green-600 bg-green-50'}`}>{message.text}</div>)}
+              {message.text && (
+                <div className={`text-xs font-medium p-3 rounded-lg ${message.type === 'error' ? 'text-red-600 bg-red-50' : message.type === 'info' ? 'text-blue-600 bg-blue-50' : 'text-green-600 bg-green-50'}`}>{message.text}</div>
+              )}
             </form>
           </div>
           <div className="p-6 bg-white border-t border-gray-50 pb-10">
@@ -980,27 +1009,41 @@ export default function App() {
           </div>
         </div>
 
-        {/* 備註表單 Modal */}
+        {/* =========================================
+            ★ 新增/編輯備註 Modal
+            ========================================= */}
         <div className={`absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-400 ease-out h-[60%] flex flex-col ${isNoteFormOpen ? 'translate-y-0' : 'translate-y-full'}`}>
           <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-800">{editingNoteId ? '編輯備註' : '新增備註'}</h2>
             <button onClick={closeNoteForm} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X className="w-5 h-5" /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-6 py-6">
+            {/* 自動偵測的日期時間 */}
             <div className="flex items-center gap-2 mb-4 bg-gray-50 px-4 py-3 rounded-xl">
               <Calendar className="w-4 h-4 text-gray-400" />
               <span className="text-sm text-gray-500 font-medium">{getNowDateTimeString()}</span>
               <span className="text-[11px] text-gray-400 ml-auto">自動偵測</span>
             </div>
+            {/* 門店標籤 */}
             <div className="flex items-center gap-2 mb-4">
               <span className="inline-block bg-gray-200 text-gray-600 text-xs font-medium px-3 py-1 rounded-full">{loggedInBranch}</span>
             </div>
-            <textarea value={noteContent} onChange={e => setNoteContent(e.target.value)} rows="6"
-              className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none" placeholder="輸入備註內容..." autoFocus></textarea>
+            {/* 備註內容 */}
+            <textarea 
+              value={noteContent}
+              onChange={e => setNoteContent(e.target.value)}
+              rows="6"
+              className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none"
+              placeholder="輸入備註內容..."
+              autoFocus
+            ></textarea>
           </div>
           <div className="p-6 bg-white border-t border-gray-50 pb-10">
-            <button onClick={handleNoteSubmit} disabled={isSubmittingNote || !noteContent.trim()}
-              className="w-full bg-[#333333] hover:bg-black disabled:bg-gray-300 text-white py-4 rounded-2xl font-bold tracking-wide transition shadow-lg flex justify-center items-center gap-2">
+            <button 
+              onClick={handleNoteSubmit} 
+              disabled={isSubmittingNote || !noteContent.trim()}
+              className="w-full bg-[#333333] hover:bg-black disabled:bg-gray-300 text-white py-4 rounded-2xl font-bold tracking-wide transition shadow-lg flex justify-center items-center gap-2"
+            >
               {isSubmittingNote ? '處理中...' : <><Check className="w-5 h-5"/> {editingNoteId ? '儲存修改' : '確認新增'}</>}
             </button>
           </div>
