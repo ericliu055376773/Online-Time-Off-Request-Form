@@ -358,6 +358,7 @@ export default function App() {
   };
 
   const openNoteForm = (note = null) => {
+    setIsFormOpen(false);  // ★ 先關閉假單表單
     if (note) { setNoteContent(note.content); setEditingNoteId(note.id); }
     else { setNoteContent(''); setEditingNoteId(null); }
     setIsNoteFormOpen(true);
@@ -887,7 +888,8 @@ export default function App() {
         </nav>
 
         {/* 假單表單 Modal */}
-        <div className={`absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-400 ease-out h-[90%] flex flex-col ${isFormOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+        {isFormOpen && (
+        <div className="absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] h-[90%] flex flex-col">
           <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-800">{editingId ? '編輯請假單' : '填寫請假單'}</h2>
             <button onClick={closeForm} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X className="w-5 h-5" /></button>
@@ -971,9 +973,11 @@ export default function App() {
             </button>
           </div>
         </div>
+        )}
 
         {/* 備註表單 Modal */}
-        <div className={`absolute inset-x-0 bottom-0 bg-white z-50 rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] transition-transform duration-400 ease-out h-[60%] flex flex-col ${isNoteFormOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+        {isNoteFormOpen && (
+        <div className="absolute inset-x-0 bottom-0 bg-white z-[55] rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] h-[60%] flex flex-col">
           <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-800">{editingNoteId ? '編輯備註' : '新增備註'}</h2>
             <button onClick={closeNoteForm} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X className="w-5 h-5" /></button>
@@ -999,6 +1003,7 @@ export default function App() {
             </button>
           </div>
         </div>
+        )}
 
       </div>
     </div>
