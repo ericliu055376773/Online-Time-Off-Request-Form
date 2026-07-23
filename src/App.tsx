@@ -141,14 +141,44 @@ export default function App() {
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
           else await signInAnonymously(auth);
-        } catch (error) { console.error("登入失敗:", error); }
+        } catch (error) { 
+          console.error("登入失敗:", error);
+          // 即使匿名登入失敗，也標記設定已載入，讓畫面能顯示
+          setConfigLoaded(true);
+        }
       }
     });
     return () => unsubscribe();
   }, []);
 
   // ------------------------------------------
-  // Firebase 資料讀取
+  // ★ 設定檔讀取（獨立於 user，不需要登入也能讀）
+  // ------------------------------------------
+  useEffect(() => {
+    const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.branches && data.branches.length > 0 && typeof data.branches[0] === 'string') {
+          data.branches = data.branches.map(name => ({ name, password: '', employees: [] }));
+        }
+        if (data.branches) {
+          data.branches = data.branches.map(b => ({
+            ...(typeof b === 'string' ? { name: b, password: '', employees: [] } : b),
+            employees: (typeof b === 'string' ? [] : b.employees) || []
+          }));
+        }
+        setConfig(data);
+      }
+      setConfigLoaded(true);
+    }, (err) => { 
+      console.error("讀取設定失敗:", err); 
+      setConfigLoaded(true); 
+    });
+    return () => unsubConfig();
+  }, []);
+
+  // ------------------------------------------
+  // Firebase 使用者資料讀取（需要 user）
   // ------------------------------------------
   useEffect(() => {
     if (!user) return;
@@ -169,25 +199,7 @@ export default function App() {
       setNotes(data);
     }, (err) => console.error("讀取備註失敗:", err));
 
-    const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.branches && data.branches.length > 0 && typeof data.branches[0] === 'string') {
-          data.branches = data.branches.map(name => ({ name, password: '', employees: [] }));
-        }
-        // 確保每個 branch 都有 employees 陣列
-        if (data.branches) {
-          data.branches = data.branches.map(b => ({
-            ...(typeof b === 'string' ? { name: b, password: '', employees: [] } : b),
-            employees: (typeof b === 'string' ? [] : b.employees) || []
-          }));
-        }
-        setConfig(data);
-      }
-      setConfigLoaded(true);
-    }, (err) => { console.error("讀取設定失敗:", err); setConfigLoaded(true); });
-
-    return () => { unsubLeave(); unsubNotes(); unsubConfig(); };
+    return () => { unsubLeave(); unsubNotes(); };
   }, [user]);
 
   // ------------------------------------------
@@ -272,8 +284,9 @@ export default function App() {
   };
 
   const handleFabClick = () => {
-    if (activeTab === 'notes') { openNoteForm(); }
+    if (activeTab === 'notes') { setIsFormOpen(false); openNoteForm(); }
     else if (activeTab === 'leave') {
+      setIsNoteFormOpen(false);
       setFormData({ ...defaultFormData, branch: loggedInBranch });
       setEditingId(null); setMessage({ type: '', text: '' }); setIsFormOpen(true);
     }
@@ -338,7 +351,7 @@ export default function App() {
 
   const handleEdit = (req) => {
     setFormData({ name: req.name, branch: req.branch, leaveType: req.leaveType, startDate: req.startDate, endDate: req.endDate, reasonType: req.reasonType || req.reason || '', reasonDetail: req.reasonDetail || '', photoBase64: req.photoBase64 || '' });
-    setEditingId(req.id); setMessage({ type: '', text: '' }); setIsFormOpen(true);
+    setEditingId(req.id); setMessage({ type: '', text: '' }); setIsNoteFormOpen(false); setIsFormOpen(true);
   };
 
   const handleDelete = async (id) => {
@@ -866,17 +879,17 @@ export default function App() {
 
         {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
         <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('leave'); }}
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('leave'); setIsFormOpen(false); setIsNoteFormOpen(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <List className="w-4 h-4" />
             <span className="text-[13px] font-medium">假單總覽</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); }}
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); setIsFormOpen(false); setIsNoteFormOpen(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'notes' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <MessageSquare className="w-4 h-4" />
             <span className="text-[13px] font-medium">備註</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); }}
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); setIsFormOpen(false); setIsNoteFormOpen(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'stats' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <BarChart3 className="w-4 h-4" />
             <span className="text-[13px] font-medium">統計</span>
