@@ -143,8 +143,7 @@ export default function App() {
           else await signInAnonymously(auth);
         } catch (error) { 
           console.error("登入失敗:", error);
-          // 即使匿名登入失敗，也標記設定已載入，讓畫面能顯示
-          setConfigLoaded(true);
+          setConfigLoaded(true);  // 即使登入失敗也讓畫面顯示
         }
       }
     });
@@ -152,33 +151,7 @@ export default function App() {
   }, []);
 
   // ------------------------------------------
-  // ★ 設定檔讀取（獨立於 user，不需要登入也能讀）
-  // ------------------------------------------
-  useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.branches && data.branches.length > 0 && typeof data.branches[0] === 'string') {
-          data.branches = data.branches.map(name => ({ name, password: '', employees: [] }));
-        }
-        if (data.branches) {
-          data.branches = data.branches.map(b => ({
-            ...(typeof b === 'string' ? { name: b, password: '', employees: [] } : b),
-            employees: (typeof b === 'string' ? [] : b.employees) || []
-          }));
-        }
-        setConfig(data);
-      }
-      setConfigLoaded(true);
-    }, (err) => { 
-      console.error("讀取設定失敗:", err); 
-      setConfigLoaded(true); 
-    });
-    return () => unsubConfig();
-  }, []);
-
-  // ------------------------------------------
-  // Firebase 使用者資料讀取（需要 user）
+  // Firebase 資料讀取（需要 user 登入後才能讀）
   // ------------------------------------------
   useEffect(() => {
     if (!user) return;
@@ -199,7 +172,24 @@ export default function App() {
       setNotes(data);
     }, (err) => console.error("讀取備註失敗:", err));
 
-    return () => { unsubLeave(); unsubNotes(); };
+    const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.branches && data.branches.length > 0 && typeof data.branches[0] === 'string') {
+          data.branches = data.branches.map(name => ({ name, password: '', employees: [] }));
+        }
+        if (data.branches) {
+          data.branches = data.branches.map(b => ({
+            ...(typeof b === 'string' ? { name: b, password: '', employees: [] } : b),
+            employees: (typeof b === 'string' ? [] : b.employees) || []
+          }));
+        }
+        setConfig(data);
+      }
+      setConfigLoaded(true);
+    }, (err) => { console.error("讀取設定失敗:", err); setConfigLoaded(true); });
+
+    return () => { unsubLeave(); unsubNotes(); unsubConfig(); };
   }, [user]);
 
   // ------------------------------------------
