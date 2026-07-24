@@ -676,13 +676,15 @@ export default function App() {
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 pb-32 pt-4">
             {activeTab === 'leave' ? (
-              /* --- 假單總覽 --- */
+              /* --- 假單總覽（只顯示本門店） --- */
               <div className="mb-4">
-                {leaveRequests.length === 0 ? (
+                {(() => {
+                  const filtered = leaveRequests.filter(r => r.branch === loggedInBranch);
+                  return filtered.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">目前沒有任何請假紀錄</div>
                 ) : (
                   <div className="relative pt-2">
-                    {leaveRequests.map((req) => (
+                    {filtered.map((req) => (
                       <div key={req.id} className="flex relative mb-6 group bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] overflow-hidden border border-gray-50">
                         <div className={`w-10 shrink-0 flex items-center justify-center ${getBranchColor(req.branch)}`}>
                           <span className="text-white text-[13px] font-bold tracking-[0.2em] py-3 select-none" style={{ writingMode: 'vertical-rl' }}>{req.branch}</span>
@@ -707,12 +709,15 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                )}
+                );
+                })()}
               </div>
             ) : activeTab === 'notes' ? (
-              /* --- 備註 --- */
+              /* --- 備註（只顯示本門店） --- */
               <div className="mb-4">
-                {notes.length === 0 ? (
+                {(() => {
+                  const filteredNotes = notes.filter(n => n.branch === loggedInBranch);
+                  return filteredNotes.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">
                     <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                     <p>目前沒有任何備註</p>
@@ -720,7 +725,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-3 pt-2">
-                    {notes.map((note) => (
+                    {filteredNotes.map((note) => (
                       <div key={note.id} className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-4">
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-2 text-xs text-gray-400"><Calendar className="w-3.5 h-3.5" /><span>{note.dateTime}</span></div>
@@ -734,7 +739,8 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                )}
+                );
+                })()}
               </div>
             ) : (
               /* --- ★ 本月統計 --- */
