@@ -151,18 +151,20 @@ export default function App() {
   }, []);
 
   // ------------------------------------------
-  // Firebase 資料讀取（需要 user 登入後才能讀）
+  // Firebase 資料讀取（共用路徑，所有裝置共享）
   // ------------------------------------------
   useEffect(() => {
     if (!user) return;
     
-    const unsubLeave = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests'), (snap) => {
+    // ★ 改為共用路徑：artifacts/{appId}/public/data/leave_requests
+    const unsubLeave = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'leave_requests'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
       setLeaveRequests(data);
     }, (err) => console.error("讀取請假單失敗:", err));
 
-    const unsubNotes = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'notes'), (snap) => {
+    // ★ 改為共用路徑：artifacts/{appId}/public/data/notes
+    const unsubNotes = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'notes'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a, b) => {
         const dA = a.createdAt?.toDate?.() || new Date(a.dateTime || 0);
@@ -332,8 +334,8 @@ export default function App() {
       reason: formData.reasonType.trim(), photoBase64: formData.photoBase64
     };
     try {
-      if (editingId) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', editingId), { ...saveData, updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'leave_requests'), { ...saveData, status: '待審核', createdAt: serverTimestamp() });
+      if (editingId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leave_requests', editingId), { ...saveData, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leave_requests'), { ...saveData, status: '待審核', createdAt: serverTimestamp() });
       closeForm();
     } catch { setMessage({ type: 'error', text: '儲存失敗' }); }
     finally { setIsSubmitting(false); }
@@ -346,7 +348,7 @@ export default function App() {
 
   const handleDelete = async (id) => {
     if (!user || !window.confirm('確定要刪除這筆請假紀錄嗎？')) return;
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'leave_requests', id)); } catch {}
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leave_requests', id)); } catch {}
   };
 
   // ------------------------------------------
@@ -369,15 +371,15 @@ export default function App() {
     if (!noteContent.trim() || !user) return;
     setIsSubmittingNote(true);
     try {
-      if (editingNoteId) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', editingNoteId), { content: noteContent.trim(), updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'notes'), { content: noteContent.trim(), branch: loggedInBranch, dateTime: getNowDateTimeString(), createdAt: serverTimestamp() });
+      if (editingNoteId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', editingNoteId), { content: noteContent.trim(), updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'notes'), { content: noteContent.trim(), branch: loggedInBranch, dateTime: getNowDateTimeString(), createdAt: serverTimestamp() });
       closeNoteForm();
     } catch {} finally { setIsSubmittingNote(false); }
   };
 
   const handleDeleteNote = async (id) => {
     if (!user || !window.confirm('確定要刪除這筆備註嗎？')) return;
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', id)); } catch {}
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', id)); } catch {}
   };
 
   // ------------------------------------------
