@@ -74,6 +74,12 @@ export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  // ★ 假單篩選狀態
+  const [leaveFilterMode, setLeaveFilterMode] = useState('month'); // 'month' | 'today' | 'custom'
+  const [showLeaveFilterMenu, setShowLeaveFilterMenu] = useState(false);
+  const [customFilterYear, setCustomFilterYear] = useState(new Date().getFullYear());
+  const [customFilterMonth, setCustomFilterMonth] = useState(new Date().getMonth() + 1);
   
   // 管理員登入
   const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
@@ -438,6 +444,49 @@ export default function App() {
   const handleRemoveLeaveReason = (i) => { setDraftConfig(prev => { const a = [...(prev.leaveReasons || [])]; a.splice(i, 1); return { ...prev, leaveReasons: a }; }); };
   const togglePasswordVisibility = (i) => { setVisiblePasswords(prev => ({ ...prev, [i]: !prev[i] })); };
 
+  // ★ 假單篩選邏輯
+  const getFilteredLeaveRequests = () => {
+    // 先依門店過濾
+    let filtered = leaveRequests.filter(r => r.branch === loggedInBranch);
+    
+    if (leaveFilterMode === 'today') {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;
+      filtered = filtered.filter(r => {
+        const d = new Date(r.startDate);
+        const dStr = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+        return dStr === todayStr;
+      });
+    } else if (leaveFilterMode === 'month') {
+      const now = new Date();
+      filtered = filtered.filter(r => {
+        const d = new Date(r.startDate);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+    } else if (leaveFilterMode === 'custom') {
+      filtered = filtered.filter(r => {
+        const d = new Date(r.startDate);
+        return d.getFullYear() === customFilterYear && d.getMonth() === customFilterMonth - 1;
+      });
+    }
+    return filtered;
+  };
+
+  const getFilterLabel = () => {
+    if (leaveFilterMode === 'today') {
+      const t = new Date();
+      return `${t.getMonth() + 1}/${t.getDate()} 當日假單`;
+    }
+    if (leaveFilterMode === 'month') {
+      const t = new Date();
+      return `${t.getFullYear()}年${t.getMonth() + 1}月 假單`;
+    }
+    if (leaveFilterMode === 'custom') {
+      return `${customFilterYear}年${customFilterMonth}月 假單`;
+    }
+    return '假單總覽';
+  };
+
   const calculateDuration = (start, end) => {
     if (!start || !end) return '';
     const h = (new Date(end) - new Date(start)) / 3600000;
@@ -678,12 +727,17 @@ export default function App() {
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 pb-32 pt-4">
             {activeTab === 'leave' ? (
-              /* --- 假單總覽（只顯示本門店） --- */
+              /* --- 假單總覽（篩選後顯示） --- */
               <div className="mb-4">
+                {/* 篩選標籤 */}
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <span className="text-sm font-bold text-gray-700">{getFilterLabel()}</span>
+                  <span className="text-xs text-gray-400">{getFilteredLeaveRequests().length} 筆</span>
+                </div>
                 {(() => {
-                  const filtered = leaveRequests.filter(r => r.branch === loggedInBranch);
+                  const filtered = getFilteredLeaveRequests();
                   return filtered.length === 0 ? (
-                  <div className="text-center py-12 text-gray-400 text-sm">目前沒有任何請假紀錄</div>
+                  <div className="text-center py-12 text-gray-400 text-sm">此期間沒有請假紀錄</div>
                 ) : (
                   <div className="relative pt-2">
                     {filtered.map((req) => (
@@ -876,19 +930,53 @@ export default function App() {
           </button>
         )}
 
+        {/* ★ 假單篩選彈出選單 */}
+        {showLeaveFilterMenu && (
+          <div className="absolute inset-0 z-20" onClick={() => setShowLeaveFilterMenu(false)}>
+            <div className="absolute bottom-[100px] left-4 right-4 bg-white rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.15)] border border-gray-100 p-3 space-y-2" onClick={e => e.stopPropagation()}>
+              <button onClick={() => { setLeaveFilterMode('month'); setActiveTab('leave'); setShowLeaveFilterMenu(false); }}
+                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition ${leaveFilterMode === 'month' ? 'bg-[#333333] text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}>
+                📅 查詢當月假單
+              </button>
+              <button onClick={() => { setLeaveFilterMode('today'); setActiveTab('leave'); setShowLeaveFilterMenu(false); }}
+                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition ${leaveFilterMode === 'today' ? 'bg-[#333333] text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}>
+                📋 查詢當日假單
+              </button>
+              <div className={`w-full px-4 py-3 rounded-xl text-sm font-medium transition ${leaveFilterMode === 'custom' ? 'bg-[#333333] text-white' : 'bg-gray-50 text-gray-700'}`}>
+                <div className="flex items-center justify-between">
+                  <span>🔍 查詢自選月份假單</span>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <select value={customFilterYear} onChange={e => setCustomFilterYear(Number(e.target.value))}
+                    className="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 outline-none">
+                    {[2024,2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}年</option>)}
+                  </select>
+                  <select value={customFilterMonth} onChange={e => setCustomFilterMonth(Number(e.target.value))}
+                    className="flex-1 bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-800 outline-none">
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月</option>)}
+                  </select>
+                  <button onClick={() => { setLeaveFilterMode('custom'); setActiveTab('leave'); setShowLeaveFilterMenu(false); }}
+                    className="bg-[#333333] text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-black transition shrink-0">查詢</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
         <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('leave'); setIsFormOpen(false); setIsNoteFormOpen(false); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            <List className="w-4 h-4" />
-            <span className="text-[13px] font-medium">假單總覽</span>
+          <div onClick={() => { setShowLeaveFilterMenu(!showLeaveFilterMenu); setIsFormOpen(false); setIsNoteFormOpen(false); }}
+            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition relative ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            {activeTab !== 'leave' && <span className="absolute inset-0 rounded-full bg-[#333333] opacity-20 animate-ping"></span>}
+            <List className="w-4 h-4 relative z-[1]" />
+            <span className="text-[13px] font-medium relative z-[1]">假單總覽</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); setIsFormOpen(false); setIsNoteFormOpen(false); }}
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); setIsFormOpen(false); setIsNoteFormOpen(false); setShowLeaveFilterMenu(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'notes' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <MessageSquare className="w-4 h-4" />
             <span className="text-[13px] font-medium">備註</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); setIsFormOpen(false); setIsNoteFormOpen(false); }}
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); setIsFormOpen(false); setIsNoteFormOpen(false); setShowLeaveFilterMenu(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'stats' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <BarChart3 className="w-4 h-4" />
             <span className="text-[13px] font-medium">統計</span>
