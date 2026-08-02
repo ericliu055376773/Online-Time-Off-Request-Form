@@ -1,1 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>請假單</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      * { touch-action: manipulation; }
+      html, body { 
+        touch-action: manipulation;
+        -ms-touch-action: manipulation;
+        overscroll-behavior: none;
+      }
+      input, select, textarea { font-size: 16px !important; }
 
+      @keyframes btnPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(51, 51, 51, 0.7); }
+        50% { box-shadow: 0 0 0 12px rgba(51, 51, 51, 0); }
+      }
+      .btn-pulse {
+        animation: btnPulse 1.5s ease-in-out infinite !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
