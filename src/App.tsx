@@ -966,10 +966,9 @@ export default function App() {
         {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
         <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
           <div onClick={() => { setShowLeaveFilterMenu(!showLeaveFilterMenu); setIsFormOpen(false); setIsNoteFormOpen(false); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition relative ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            {activeTab !== 'leave' && <span className="absolute inset-0 rounded-full bg-[#333333] opacity-20 animate-ping"></span>}
-            <List className="w-4 h-4 relative z-[1]" />
-            <span className="text-[13px] font-medium relative z-[1]">假單總覽</span>
+            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition btn-pulse ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-[#333333] text-white'}`}>
+            <List className="w-4 h-4" />
+            <span className="text-[13px] font-medium">假單總覽</span>
           </div>
           <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); setIsFormOpen(false); setIsNoteFormOpen(false); setShowLeaveFilterMenu(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'notes' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
