@@ -507,8 +507,8 @@ export default function App() {
     style.id = 'pulse-style';
     style.textContent = `
       @keyframes btnPulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(156, 163, 175, 0.5); }
-        50% { box-shadow: 0 0 0 6px rgba(156, 163, 175, 0); }
+        0%, 100% { background-color: #f3f4f6; color: #6b7280; }
+        50% { background-color: #333333; color: #ffffff; }
       }
       .btn-pulse { animation: btnPulse 2s ease-in-out infinite; }
     `;
@@ -995,8 +995,15 @@ export default function App() {
 
         {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
         <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
-          <div onClick={() => { setShowLeaveFilterMenu(!showLeaveFilterMenu); setIsFormOpen(false); setIsNoteFormOpen(false); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md btn-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 btn-pulse'}`}>
+          <div onClick={() => { 
+              setIsFormOpen(false); setIsNoteFormOpen(false);
+              if (activeTab !== 'leave') { 
+                setIsBackendOpen(false); setActiveTab('leave'); setShowLeaveFilterMenu(false); 
+              } else { 
+                setShowLeaveFilterMenu(!showLeaveFilterMenu); 
+              }
+            }}
+            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 btn-pulse'}`}>
             <List className="w-4 h-4" />
             <span className="text-[13px] font-medium">假單總覽</span>
           </div>
