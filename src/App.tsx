@@ -80,6 +80,11 @@ export default function App() {
   const [showLeaveFilterMenu, setShowLeaveFilterMenu] = useState(false);
   const [customFilterYear, setCustomFilterYear] = useState(new Date().getFullYear());
   const [customFilterMonth, setCustomFilterMonth] = useState(new Date().getMonth() + 1);
+
+  // ★ 統計月份選擇
+  const [statsYear, setStatsYear] = useState(new Date().getFullYear());
+  const [statsMonth, setStatsMonth] = useState(new Date().getMonth() + 1);
+  const [showStatsMonthPicker, setShowStatsMonthPicker] = useState(false);
   
   // 管理員登入
   const [showAdminLoginModal, setShowAdminLoginModal] = useState(false);
@@ -389,18 +394,16 @@ export default function App() {
   };
 
   // ------------------------------------------
-  // ★ 本月請假統計
+  // ★ 請假統計（支援選擇月份）
   // ------------------------------------------
   const getMonthlyStats = () => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
+    const targetYear = statsYear;
+    const targetMonth = statsMonth - 1; // JS month is 0-based
 
-    // 篩選當月 & 目前門店的請假紀錄
     const monthlyRequests = leaveRequests.filter(req => {
       if (loggedInBranch && loggedInBranch !== '__admin__' && req.branch !== loggedInBranch) return false;
       const startDate = new Date(req.startDate);
-      return startDate.getFullYear() === currentYear && startDate.getMonth() === currentMonth;
+      return startDate.getFullYear() === targetYear && startDate.getMonth() === targetMonth;
     });
 
     // 依員工分組統計
@@ -496,6 +499,21 @@ export default function App() {
   // ==========================================
   // 3. 渲染
   // ==========================================
+
+  // ★ 閃爍動畫 style（寫在元件內，不需改 index.html）
+  useEffect(() => {
+    if (document.getElementById('pulse-style')) return;
+    const style = document.createElement('style');
+    style.id = 'pulse-style';
+    style.textContent = `
+      @keyframes btnPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(156, 163, 175, 0.5); }
+        50% { box-shadow: 0 0 0 6px rgba(156, 163, 175, 0); }
+      }
+      .btn-pulse { animation: btnPulse 2s ease-in-out infinite; }
+    `;
+    document.head.appendChild(style);
+  }, []);
 
   if (!configLoaded) {
     return (
@@ -595,7 +613,7 @@ export default function App() {
   // ★ 統計資料
   const monthlyStats = getMonthlyStats();
   const now = new Date();
-  const currentMonthLabel = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
+  const currentMonthLabel = `${statsYear} 年 ${statsMonth} 月`;
   const employees = getCurrentBranchEmployees();
 
   // ==========================================
@@ -799,11 +817,23 @@ export default function App() {
                 })()}
               </div>
             ) : (
-              /* --- ★ 本月統計 --- */
+              /* --- ★ 請假統計（可選月份） --- */
               <div className="mb-4">
+                {/* 月份選擇器 */}
+                <div className="flex items-center gap-2 mb-4">
+                  <select value={statsYear} onChange={e => setStatsYear(Number(e.target.value))}
+                    className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
+                    {[2024,2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}年</option>)}
+                  </select>
+                  <select value={statsMonth} onChange={e => setStatsMonth(Number(e.target.value))}
+                    className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月</option>)}
+                  </select>
+                </div>
+
                 <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-5 mb-4">
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-gray-800">本月請假統計</h3>
+                    <h3 className="text-base font-bold text-gray-800">請假統計</h3>
                     <span className="text-xs text-gray-400 font-medium">{currentMonthLabel}</span>
                   </div>
                   <p className="text-xs text-gray-400 mb-4">{loggedInBranch} · 共 {monthlyStats.reduce((s, e) => s + e.count, 0)} 筆</p>
@@ -811,7 +841,7 @@ export default function App() {
                   {monthlyStats.length === 0 ? (
                     <div className="text-center py-8 text-gray-400 text-sm">
                       <BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                      <p>本月尚無請假紀錄</p>
+                      <p>該月份尚無請假紀錄</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -966,7 +996,7 @@ export default function App() {
         {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
         <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
           <div onClick={() => { setShowLeaveFilterMenu(!showLeaveFilterMenu); setIsFormOpen(false); setIsNoteFormOpen(false); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition btn-pulse ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-[#333333] text-white'}`}>
+            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'leave' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md btn-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 btn-pulse'}`}>
             <List className="w-4 h-4" />
             <span className="text-[13px] font-medium">假單總覽</span>
           </div>
