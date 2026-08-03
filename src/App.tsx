@@ -907,9 +907,8 @@ export default function App() {
                 })()}
               </div>
             ) : (
-              /* --- ★ 請假＋加班統計（可選月份，可展開細項） --- */
+              /* --- ★ 請假＋加班統計（可選月份，點擊彈出細項） --- */
               <div className="mb-4">
-                {/* 月份選擇器 */}
                 <div className="flex items-center gap-2 mb-4">
                   <select value={statsYear} onChange={e => { setStatsYear(Number(e.target.value)); setExpandedStatEmployee(null); }}
                     className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
@@ -921,91 +920,109 @@ export default function App() {
                   </select>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-5 mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-gray-800">請假、<span className="text-red-500">加班</span> 統計</h3>
-                    <span className="text-xs text-gray-400 font-medium">{currentMonthLabel}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-4">{loggedInBranch} · 共 {monthlyStats.reduce((s, e) => s + e.total, 0)} 筆</p>
-
-                  {monthlyStats.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-sm">
-                      <BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                      <p>該月份尚無紀錄</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {monthlyStats.map((emp, i) => {
-                        const maxCount = monthlyStats[0]?.total || 1;
-                        const barWidth = Math.max((emp.total / maxCount) * 100, 15);
-                        const isExpanded = expandedStatEmployee === emp.name;
-                        return (
-                          <div key={i} className="cursor-pointer" onClick={() => setExpandedStatEmployee(isExpanded ? null : emp.name)}>
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="text-sm font-bold text-gray-800">{emp.name}</span>
-                              <div className="flex items-center gap-2">
-                                {emp.leaveCount > 0 && <span className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">請假 {emp.leaveCount}</span>}
-                                {emp.overtimeCount > 0 && <span className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">加班 {emp.overtimeCount}</span>}
-                              </div>
-                            </div>
-                            {/* 長條圖（灰色=請假、紅色=加班） */}
-                            <div className="w-full bg-gray-100 rounded-full h-6 overflow-hidden flex">
-                              {emp.leaveCount > 0 && <div className="h-full bg-gray-800 transition-all duration-500" style={{ width: `${(emp.leaveCount / maxCount) * 100}%` }}></div>}
-                              {emp.overtimeCount > 0 && <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${(emp.overtimeCount / maxCount) * 100}%` }}></div>}
-                            </div>
-                            {/* 假別明細標籤 */}
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {Object.entries(emp.leaveTypes).map(([type, count]) => (
-                                <span key={type} className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{type} {count}</span>
-                              ))}
-                              {emp.overtimeCount > 0 && <span className="text-[11px] bg-red-50 text-red-500 px-2 py-0.5 rounded-full">加班 {emp.overtimeCount}</span>}
-                            </div>
-                            <div className="text-[10px] text-gray-400 mt-1">{isExpanded ? '▲ 收合細項' : '▼ 點擊展開細項'}</div>
-
-                            {/* ★ 展開的細項內容 */}
-                            {isExpanded && (
-                              <div className="mt-3 space-y-2" onClick={e => e.stopPropagation()}>
-                                {/* 請假細項 */}
-                                {emp.leaveRecords.length > 0 && (
-                                  <div>
-                                    <div className="text-xs font-bold text-gray-600 mb-1.5 border-b border-gray-100 pb-1">請假紀錄</div>
-                                    {emp.leaveRecords.map((req, j) => (
-                                      <div key={j} className="bg-gray-50 rounded-lg p-3 mb-1.5 text-xs text-gray-600 space-y-1">
-                                        <div className="flex justify-between items-center">
-                                          <span className="font-bold text-gray-700">{req.leaveType}</span>
-                                          <span className="text-gray-400">{new Date(req.startDate).toLocaleDateString('zh-TW')}</span>
-                                        </div>
-                                        <div>{new Date(req.startDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})} - {new Date(req.endDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
-                                        {req.reason && <div className="text-gray-400">{req.reason}</div>}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                {/* 加班細項 */}
-                                {emp.overtimeRecords.length > 0 && (
-                                  <div>
-                                    <div className="text-xs font-bold text-red-500 mb-1.5 border-b border-red-100 pb-1">加班紀錄</div>
-                                    {emp.overtimeRecords.map((rec, j) => (
-                                      <div key={j} className="bg-red-50 rounded-lg p-3 mb-1.5 text-xs text-gray-600 space-y-1">
-                                        <div className="flex justify-between items-center">
-                                          <span className="font-bold text-red-600">{rec.displayHours}</span>
-                                          <span className="text-gray-400">{rec.date}</span>
-                                        </div>
-                                        <div>應下班：{rec.shift1End || rec.endTime || '--'} → 實際：{rec.shift2End || '--'}</div>
-                                        {rec.note && <div className="text-gray-400">{rec.note}</div>}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <h3 className="text-base font-bold text-gray-800">請假、<span className="text-red-500">加班</span> 統計</h3>
+                  <span className="text-xs text-gray-400 font-medium">{currentMonthLabel}</span>
                 </div>
-              </div>
+                <p className="text-xs text-gray-400 mb-3 px-1">{loggedInBranch} · 共 {monthlyStats.reduce((s, e) => s + e.total, 0)} 筆</p>
+
+                {monthlyStats.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400 text-sm">
+                    <BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                    <p>該月份尚無紀錄</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {monthlyStats.map((emp, i) => {
+                      const maxCount = monthlyStats[0]?.total || 1;
+                      return (
+                        <div key={i} onClick={() => setExpandedStatEmployee(emp.name)}
+                          className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-4 cursor-pointer active:scale-[0.98] transition-transform">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-[15px] font-bold text-gray-800">{emp.name}</span>
+                            <div className="flex items-center gap-1.5">
+                              {emp.leaveCount > 0 && <span className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">請假 {emp.leaveCount}</span>}
+                              {emp.overtimeCount > 0 && <span className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">加班 {emp.overtimeCount}</span>}
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-5 overflow-hidden flex">
+                            {emp.leaveCount > 0 && <div className="h-full bg-gray-800 transition-all duration-500" style={{ width: `${(emp.leaveCount / maxCount) * 100}%` }}></div>}
+                            {emp.overtimeCount > 0 && <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${(emp.overtimeCount / maxCount) * 100}%` }}></div>}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {Object.entries(emp.leaveTypes).map(([type, count]) => (
+                              <span key={type} className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{type} {count}</span>
+                            ))}
+                          </div>
+                          <div className="text-[10px] text-center text-gray-400 mt-2">點擊查看細項</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ★ 員工細項彈出視窗 */}
+                {expandedStatEmployee && (() => {
+                  const emp = monthlyStats.find(e => e.name === expandedStatEmployee);
+                  if (!emp) return null;
+                  return (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-5" onClick={() => setExpandedStatEmployee(null)}>
+                      <div className="bg-white rounded-3xl w-full max-w-[380px] max-h-[80vh] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        {/* 標題區 */}
+                        <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex justify-between items-center shrink-0">
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-800">{emp.name}</h3>
+                            <p className="text-xs text-gray-400 mt-0.5">{currentMonthLabel} · {loggedInBranch}</p>
+                          </div>
+                          <button onClick={() => setExpandedStatEmployee(null)} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X className="w-5 h-5" /></button>
+                        </div>
+                        {/* 統計摘要 */}
+                        <div className="px-6 py-3 flex gap-3 border-b border-gray-50 shrink-0">
+                          {emp.leaveCount > 0 && <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-gray-800">{emp.leaveCount}</div><div className="text-[11px] text-gray-400 mt-0.5">請假次數</div></div>}
+                          {emp.overtimeCount > 0 && <div className="flex-1 bg-red-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-red-500">{emp.overtimeCount}</div><div className="text-[11px] text-red-400 mt-0.5">加班次數</div></div>}
+                        </div>
+                        {/* 細項列表 */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                          {emp.leaveRecords.length > 0 && (
+                            <div>
+                              <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />請假紀錄</div>
+                              <div className="space-y-2">
+                                {emp.leaveRecords.map((req, j) => (
+                                  <div key={j} className="bg-gray-50 rounded-xl p-3 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-sm font-bold text-gray-700">{req.leaveType}</span>
+                                      <span className="text-xs text-gray-400">{new Date(req.startDate).toLocaleDateString('zh-TW')}</span>
+                                    </div>
+                                    <div className="text-xs text-gray-500">{new Date(req.startDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})} - {new Date(req.endDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
+                                    {req.reason && <div className="text-xs text-gray-400 break-words">{req.reason}</div>}
+                                    {req.photoBase64 && <img src={req.photoBase64} alt="" className="w-full h-20 object-cover rounded-lg mt-1" />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {emp.overtimeRecords.length > 0 && (
+                            <div>
+                              <div className="text-xs font-bold text-red-500 mb-2 flex items-center gap-1.5"><ClockIcon className="w-3.5 h-3.5" />加班紀錄</div>
+                              <div className="space-y-2">
+                                {emp.overtimeRecords.map((rec, j) => (
+                                  <div key={j} className="bg-red-50 rounded-xl p-3 space-y-1">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-sm font-bold text-red-600">{rec.displayHours}</span>
+                                      <span className="text-xs text-gray-400">{rec.date}</span>
+                                    </div>
+                                    <div className="text-xs text-gray-500">應下班：{rec.shift1End || rec.endTime || '--'} → 實際：{rec.shift2End || '--'}</div>
+                                    {rec.note && <div className="text-xs text-gray-400 break-words">{rec.note}</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
             )}
           </div>
         )}
