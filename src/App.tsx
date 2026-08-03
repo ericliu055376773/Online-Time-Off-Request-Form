@@ -1223,13 +1223,29 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] text-gray-400 ml-1">上班</label>
-                  <input type="time" value={overtimeForm.shift1Start} onChange={e => setOvertimeForm(p => ({...p, shift1Start: e.target.value}))}
-                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                  <div className="flex gap-1">
+                    <select value={overtimeForm.shift1Start.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift1Start: e.target.value + ':' + p.shift1Start.split(':')[1]}))}
+                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                      {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
+                    </select>
+                    <select value={overtimeForm.shift1Start.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift1Start: p.shift1Start.split(':')[0] + ':' + e.target.value}))}
+                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                      {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] text-gray-400 ml-1">下班</label>
-                  <input type="time" value={overtimeForm.shift1End} onChange={e => setOvertimeForm(p => ({...p, shift1End: e.target.value}))}
-                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                  <div className="flex gap-1">
+                    <select value={overtimeForm.shift1End.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift1End: e.target.value + ':' + p.shift1End.split(':')[1]}))}
+                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                      {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
+                    </select>
+                    <select value={overtimeForm.shift1End.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift1End: p.shift1End.split(':')[0] + ':' + e.target.value}))}
+                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                      {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1247,13 +1263,29 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] text-gray-400 ml-1">上班</label>
-                    <input type="time" value={overtimeForm.shift2Start} onChange={e => setOvertimeForm(p => ({...p, shift2Start: e.target.value}))}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                    <div className="flex gap-1">
+                      <select value={overtimeForm.shift2Start.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift2Start: e.target.value + ':' + p.shift2Start.split(':')[1]}))}
+                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                        {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
+                      </select>
+                      <select value={overtimeForm.shift2Start.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift2Start: p.shift2Start.split(':')[0] + ':' + e.target.value}))}
+                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                        {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 ml-1">下班</label>
-                    <input type="time" value={overtimeForm.shift2End} onChange={e => setOvertimeForm(p => ({...p, shift2End: e.target.value}))}
-                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                    <div className="flex gap-1">
+                      <select value={overtimeForm.shift2End.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift2End: e.target.value + ':' + p.shift2End.split(':')[1]}))}
+                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                        {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
+                      </select>
+                      <select value={overtimeForm.shift2End.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift2End: p.shift2End.split(':')[0] + ':' + e.target.value}))}
+                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                        {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
