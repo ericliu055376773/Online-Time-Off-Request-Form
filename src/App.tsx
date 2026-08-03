@@ -106,9 +106,12 @@ export default function App() {
   const [overtimeForm, setOvertimeForm] = useState({
     name: '',
     date: '',
-    startTime: '09:00',
-    endTime: '18:00',
-    hours: 1,
+    shift1Start: '09:00',
+    shift1End: '18:00',
+    shift2Enabled: false,
+    shift2Start: '00:00',
+    shift2End: '00:00',
+    hours: 0,
     minutes: 0,
     note: ''
   });
@@ -385,9 +388,12 @@ export default function App() {
       setOvertimeForm({
         name: record.name || '',
         date: record.date || '',
-        startTime: record.startTime || '09:00',
-        endTime: record.endTime || '18:00',
-        hours: record.hours || 1,
+        shift1Start: record.shift1Start || record.startTime || '09:00',
+        shift1End: record.shift1End || record.endTime || '18:00',
+        shift2Enabled: record.shift2Enabled || false,
+        shift2Start: record.shift2Start || '00:00',
+        shift2End: record.shift2End || '00:00',
+        hours: record.hours || 0,
         minutes: record.minutes || 0,
         note: record.note || ''
       });
@@ -395,8 +401,9 @@ export default function App() {
     } else {
       setOvertimeForm({
         name: '', date: getTodayDateString(),
-        startTime: '09:00', endTime: '18:00',
-        hours: 1, minutes: 0, note: ''
+        shift1Start: '09:00', shift1End: '18:00',
+        shift2Enabled: false, shift2Start: '00:00', shift2End: '00:00',
+        hours: 0, minutes: 0, note: ''
       });
       setEditingOvertimeId(null);
     }
@@ -417,8 +424,11 @@ export default function App() {
       name: overtimeForm.name,
       branch: loggedInBranch,
       date: overtimeForm.date,
-      startTime: overtimeForm.startTime,
-      endTime: overtimeForm.endTime,
+      shift1Start: overtimeForm.shift1Start,
+      shift1End: overtimeForm.shift1End,
+      shift2Enabled: overtimeForm.shift2Enabled,
+      shift2Start: overtimeForm.shift2Start,
+      shift2End: overtimeForm.shift2End,
       hours: overtimeForm.hours,
       minutes: overtimeForm.minutes,
       totalMinutes,
@@ -859,7 +869,15 @@ export default function App() {
                           </div>
                           <div className="flex items-center text-xs text-gray-500">
                             <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
-                            <span>{rec.startTime} - {rec.endTime}</span>
+                            <span>時段一：{rec.shift1Start || rec.startTime} - {rec.shift1End || rec.endTime}</span>
+                          </div>
+                          {rec.shift2Enabled && (
+                            <div className="flex items-center text-xs text-gray-500">
+                              <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
+                              <span>時段二：{rec.shift2Start} - {rec.shift2End}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center text-xs text-gray-500">
                             <span className="ml-auto bg-red-100 text-red-600 text-[11px] font-bold px-2 py-0.5 rounded-full">{rec.displayHours}</span>
                           </div>
                           {rec.note && (
@@ -1199,18 +1217,46 @@ export default function App() {
                 className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
             </div>
 
-            {/* 上班 / 下班時間 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">上班時間</label>
-                <input type="time" value={overtimeForm.startTime} onChange={e => setOvertimeForm(p => ({...p, startTime: e.target.value}))}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+            {/* ★ 時段一 */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">時段一</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-gray-400 ml-1">上班</label>
+                  <input type="time" value={overtimeForm.shift1Start} onChange={e => setOvertimeForm(p => ({...p, shift1Start: e.target.value}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 ml-1">下班</label>
+                  <input type="time" value={overtimeForm.shift1End} onChange={e => setOvertimeForm(p => ({...p, shift1End: e.target.value}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">下班時間</label>
-                <input type="time" value={overtimeForm.endTime} onChange={e => setOvertimeForm(p => ({...p, endTime: e.target.value}))}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+            </div>
+
+            {/* ★ 時段二（可開關） */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between ml-1">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">時段二</label>
+                <button type="button" onClick={() => setOvertimeForm(p => ({...p, shift2Enabled: !p.shift2Enabled}))}
+                  className={`text-xs font-bold px-3 py-1 rounded-full transition ${overtimeForm.shift2Enabled ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                  {overtimeForm.shift2Enabled ? '已啟用' : '無（點擊啟用）'}
+                </button>
               </div>
+              {overtimeForm.shift2Enabled && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-gray-400 ml-1">上班</label>
+                    <input type="time" value={overtimeForm.shift2Start} onChange={e => setOvertimeForm(p => ({...p, shift2Start: e.target.value}))}
+                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 ml-1">下班</label>
+                    <input type="time" value={overtimeForm.shift2End} onChange={e => setOvertimeForm(p => ({...p, shift2End: e.target.value}))}
+                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none" />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ★ 加班時數（滾輪式，15分鐘為單位） */}
