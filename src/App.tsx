@@ -448,32 +448,48 @@ export default function App() {
   };
 
   // ------------------------------------------
-  // ★ 請假統計（支援選擇月份）
+  // ★ 請假+加班統計（支援選擇月份）
   // ------------------------------------------
+  const [expandedStatEmployee, setExpandedStatEmployee] = useState(null);
+
   const getMonthlyStats = () => {
     const targetYear = statsYear;
-    const targetMonth = statsMonth - 1; // JS month is 0-based
+    const targetMonth = statsMonth - 1;
 
-    const monthlyRequests = leaveRequests.filter(req => {
+    // 請假紀錄
+    const monthlyLeaves = leaveRequests.filter(req => {
       if (loggedInBranch && loggedInBranch !== '__admin__' && req.branch !== loggedInBranch) return false;
-      const startDate = new Date(req.startDate);
-      return startDate.getFullYear() === targetYear && startDate.getMonth() === targetMonth;
+      const d = new Date(req.startDate);
+      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     });
 
-    // 依員工分組統計
+    // 加班紀錄
+    const monthlyOT = overtimeRecords.filter(rec => {
+      if (loggedInBranch && loggedInBranch !== '__admin__' && rec.branch !== loggedInBranch) return false;
+      const d = new Date(rec.date);
+      return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+    });
+
+    // 依員工分組
     const statsMap = {};
-    monthlyRequests.forEach(req => {
+    monthlyLeaves.forEach(req => {
       const name = req.name || '未知';
-      if (!statsMap[name]) statsMap[name] = { count: 0, types: {} };
-      statsMap[name].count += 1;
+      if (!statsMap[name]) statsMap[name] = { leaveCount: 0, overtimeCount: 0, leaveTypes: {}, leaveRecords: [], overtimeRecords: [] };
+      statsMap[name].leaveCount += 1;
       const t = req.leaveType || '其他';
-      statsMap[name].types[t] = (statsMap[name].types[t] || 0) + 1;
+      statsMap[name].leaveTypes[t] = (statsMap[name].leaveTypes[t] || 0) + 1;
+      statsMap[name].leaveRecords.push(req);
+    });
+    monthlyOT.forEach(rec => {
+      const name = rec.name || '未知';
+      if (!statsMap[name]) statsMap[name] = { leaveCount: 0, overtimeCount: 0, leaveTypes: {}, leaveRecords: [], overtimeRecords: [] };
+      statsMap[name].overtimeCount += 1;
+      statsMap[name].overtimeRecords.push(rec);
     });
 
-    // 轉為陣列並按次數排序
     return Object.entries(statsMap)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.count - a.count);
+      .map(([name, data]) => ({ name, ...data, total: data.leaveCount + data.overtimeCount }))
+      .sort((a, b) => b.total - a.total);
   };
 
   // ------------------------------------------
@@ -891,15 +907,15 @@ export default function App() {
                 })()}
               </div>
             ) : (
-              /* --- ★ 請假統計（可選月份） --- */
+              /* --- ★ 請假＋加班統計（可選月份，可展開細項） --- */
               <div className="mb-4">
                 {/* 月份選擇器 */}
                 <div className="flex items-center gap-2 mb-4">
-                  <select value={statsYear} onChange={e => setStatsYear(Number(e.target.value))}
+                  <select value={statsYear} onChange={e => { setStatsYear(Number(e.target.value)); setExpandedStatEmployee(null); }}
                     className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
                     {[2024,2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}年</option>)}
                   </select>
-                  <select value={statsMonth} onChange={e => setStatsMonth(Number(e.target.value))}
+                  <select value={statsMonth} onChange={e => { setStatsMonth(Number(e.target.value)); setExpandedStatEmployee(null); }}
                     className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
                     {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月</option>)}
                   </select>
@@ -907,38 +923,82 @@ export default function App() {
 
                 <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-5 mb-4">
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-gray-800">請假統計</h3>
+                    <h3 className="text-base font-bold text-gray-800">請假、<span className="text-red-500">加班</span> 統計</h3>
                     <span className="text-xs text-gray-400 font-medium">{currentMonthLabel}</span>
                   </div>
-                  <p className="text-xs text-gray-400 mb-4">{loggedInBranch} · 共 {monthlyStats.reduce((s, e) => s + e.count, 0)} 筆</p>
+                  <p className="text-xs text-gray-400 mb-4">{loggedInBranch} · 共 {monthlyStats.reduce((s, e) => s + e.total, 0)} 筆</p>
 
                   {monthlyStats.length === 0 ? (
                     <div className="text-center py-8 text-gray-400 text-sm">
                       <BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                      <p>該月份尚無請假紀錄</p>
+                      <p>該月份尚無紀錄</p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {monthlyStats.map((emp, i) => {
-                        const maxCount = monthlyStats[0]?.count || 1;
-                        const barWidth = Math.max((emp.count / maxCount) * 100, 15);
+                        const maxCount = monthlyStats[0]?.total || 1;
+                        const barWidth = Math.max((emp.total / maxCount) * 100, 15);
+                        const isExpanded = expandedStatEmployee === emp.name;
                         return (
-                          <div key={i}>
+                          <div key={i} className="cursor-pointer" onClick={() => setExpandedStatEmployee(isExpanded ? null : emp.name)}>
                             <div className="flex justify-between items-center mb-1.5">
                               <span className="text-sm font-bold text-gray-800">{emp.name}</span>
-                              <span className="text-sm font-bold text-gray-900">{emp.count} 次</span>
-                            </div>
-                            {/* 長條圖 */}
-                            <div className="w-full bg-gray-100 rounded-full h-6 overflow-hidden">
-                              <div className="h-full bg-gray-800 rounded-full flex items-center transition-all duration-500 ease-out" style={{ width: `${barWidth}%` }}>
+                              <div className="flex items-center gap-2">
+                                {emp.leaveCount > 0 && <span className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">請假 {emp.leaveCount}</span>}
+                                {emp.overtimeCount > 0 && <span className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full">加班 {emp.overtimeCount}</span>}
                               </div>
                             </div>
-                            {/* 假別明細 */}
+                            {/* 長條圖（灰色=請假、紅色=加班） */}
+                            <div className="w-full bg-gray-100 rounded-full h-6 overflow-hidden flex">
+                              {emp.leaveCount > 0 && <div className="h-full bg-gray-800 transition-all duration-500" style={{ width: `${(emp.leaveCount / maxCount) * 100}%` }}></div>}
+                              {emp.overtimeCount > 0 && <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${(emp.overtimeCount / maxCount) * 100}%` }}></div>}
+                            </div>
+                            {/* 假別明細標籤 */}
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {Object.entries(emp.types).map(([type, count]) => (
+                              {Object.entries(emp.leaveTypes).map(([type, count]) => (
                                 <span key={type} className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{type} {count}</span>
                               ))}
+                              {emp.overtimeCount > 0 && <span className="text-[11px] bg-red-50 text-red-500 px-2 py-0.5 rounded-full">加班 {emp.overtimeCount}</span>}
                             </div>
+                            <div className="text-[10px] text-gray-400 mt-1">{isExpanded ? '▲ 收合細項' : '▼ 點擊展開細項'}</div>
+
+                            {/* ★ 展開的細項內容 */}
+                            {isExpanded && (
+                              <div className="mt-3 space-y-2" onClick={e => e.stopPropagation()}>
+                                {/* 請假細項 */}
+                                {emp.leaveRecords.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-bold text-gray-600 mb-1.5 border-b border-gray-100 pb-1">請假紀錄</div>
+                                    {emp.leaveRecords.map((req, j) => (
+                                      <div key={j} className="bg-gray-50 rounded-lg p-3 mb-1.5 text-xs text-gray-600 space-y-1">
+                                        <div className="flex justify-between items-center">
+                                          <span className="font-bold text-gray-700">{req.leaveType}</span>
+                                          <span className="text-gray-400">{new Date(req.startDate).toLocaleDateString('zh-TW')}</span>
+                                        </div>
+                                        <div>{new Date(req.startDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})} - {new Date(req.endDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})}</div>
+                                        {req.reason && <div className="text-gray-400">{req.reason}</div>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* 加班細項 */}
+                                {emp.overtimeRecords.length > 0 && (
+                                  <div>
+                                    <div className="text-xs font-bold text-red-500 mb-1.5 border-b border-red-100 pb-1">加班紀錄</div>
+                                    {emp.overtimeRecords.map((rec, j) => (
+                                      <div key={j} className="bg-red-50 rounded-lg p-3 mb-1.5 text-xs text-gray-600 space-y-1">
+                                        <div className="flex justify-between items-center">
+                                          <span className="font-bold text-red-600">{rec.displayHours}</span>
+                                          <span className="text-gray-400">{rec.date}</span>
+                                        </div>
+                                        <div>應下班：{rec.shift1End || rec.endTime || '--'} → 實際：{rec.shift2End || '--'}</div>
+                                        {rec.note && <div className="text-gray-400">{rec.note}</div>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
