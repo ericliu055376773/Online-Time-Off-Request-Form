@@ -6,7 +6,7 @@ import {
   ChevronLeft, List, Clock as ClockIcon, 
   Plus, X, Check, Calendar, Trash2,
   Settings, Save, Edit2, LogOut, Camera, Lock, Eye, EyeOff, ChevronDown,
-  FileText, MessageSquare, Users, BarChart3
+  FileText, Users, BarChart3
 } from 'lucide-react';
 
 // ==========================================
@@ -69,7 +69,7 @@ export default function App() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // UI 狀態
-  const [activeTab, setActiveTab] = useState('leave'); // 'leave' | 'notes' | 'stats'
+  const [activeTab, setActiveTab] = useState('leave'); // 'leave' | 'overtime' | 'stats'
   const [isBackendOpen, setIsBackendOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,12 +98,20 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const fileInputRef = useRef(null);
 
-  // ★ 備註
-  const [notes, setNotes] = useState([]);
-  const [isNoteFormOpen, setIsNoteFormOpen] = useState(false);
-  const [noteContent, setNoteContent] = useState('');
-  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState(null);
+  // ★ 加班
+  const [overtimeRecords, setOvertimeRecords] = useState([]);
+  const [isOvertimeFormOpen, setIsOvertimeFormOpen] = useState(false);
+  const [isSubmittingOvertime, setIsSubmittingOvertime] = useState(false);
+  const [editingOvertimeId, setEditingOvertimeId] = useState(null);
+  const [overtimeForm, setOvertimeForm] = useState({
+    name: '',
+    date: '',
+    startTime: '09:00',
+    endTime: '18:00',
+    hours: 1,
+    minutes: 0,
+    note: ''
+  });
 
   // ★ 員工管理
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -174,16 +182,16 @@ export default function App() {
       setLeaveRequests(data);
     }, (err) => console.error("讀取請假單失敗:", err));
 
-    // ★ 改為共用路徑：artifacts/{appId}/public/data/notes
-    const unsubNotes = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'notes'), (snap) => {
+    // ★ 讀取加班紀錄
+    const unsubOvertime = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'overtime_records'), (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a, b) => {
-        const dA = a.createdAt?.toDate?.() || new Date(a.dateTime || 0);
-        const dB = b.createdAt?.toDate?.() || new Date(b.dateTime || 0);
+        const dA = a.createdAt?.toDate?.() || new Date(a.date || 0);
+        const dB = b.createdAt?.toDate?.() || new Date(b.date || 0);
         return dB - dA;
       });
-      setNotes(data);
-    }, (err) => console.error("讀取備註失敗:", err));
+      setOvertimeRecords(data);
+    }, (err) => console.error("讀取加班紀錄失敗:", err));
 
     const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
       if (docSnap.exists()) {
@@ -202,7 +210,7 @@ export default function App() {
       setConfigLoaded(true);
     }, (err) => { console.error("讀取設定失敗:", err); setConfigLoaded(true); });
 
-    return () => { unsubLeave(); unsubNotes(); unsubConfig(); };
+    return () => { unsubLeave(); unsubOvertime(); unsubConfig(); };
   }, [user]);
 
   // ------------------------------------------
@@ -287,9 +295,9 @@ export default function App() {
   };
 
   const handleFabClick = () => {
-    if (activeTab === 'notes') { setIsFormOpen(false); openNoteForm(); }
+    if (activeTab === 'overtime') { setIsFormOpen(false); openOvertimeForm(); }
     else if (activeTab === 'leave') {
-      setIsNoteFormOpen(false);
+      setIsOvertimeFormOpen(false);
       setFormData({ ...defaultFormData, branch: loggedInBranch });
       setEditingId(null); setMessage({ type: '', text: '' }); setIsFormOpen(true);
     }
@@ -354,7 +362,7 @@ export default function App() {
 
   const handleEdit = (req) => {
     setFormData({ name: req.name, branch: req.branch, leaveType: req.leaveType, startDate: req.startDate, endDate: req.endDate, reasonType: req.reasonType || req.reason || '', reasonDetail: req.reasonDetail || '', photoBase64: req.photoBase64 || '' });
-    setEditingId(req.id); setMessage({ type: '', text: '' }); setIsNoteFormOpen(false); setIsFormOpen(true);
+    setEditingId(req.id); setMessage({ type: '', text: '' }); setIsOvertimeFormOpen(false); setIsFormOpen(true);
   };
 
   const handleDelete = async (id) => {
@@ -363,34 +371,70 @@ export default function App() {
   };
 
   // ------------------------------------------
-  // 備註
+  // ★ 加班功能
   // ------------------------------------------
-  const getNowDateTimeString = () => {
-    const now = new Date(); const p = (n) => String(n).padStart(2, '0');
-    return `${now.getFullYear()}/${p(now.getMonth() + 1)}/${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`;
+  const getTodayDateString = () => {
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
   };
 
-  const openNoteForm = (note = null) => {
-    setIsFormOpen(false);  // ★ 先關閉假單表單
-    if (note) { setNoteContent(note.content); setEditingNoteId(note.id); }
-    else { setNoteContent(''); setEditingNoteId(null); }
-    setIsNoteFormOpen(true);
+  const openOvertimeForm = (record = null) => {
+    setIsFormOpen(false);
+    if (record) {
+      setOvertimeForm({
+        name: record.name || '',
+        date: record.date || '',
+        startTime: record.startTime || '09:00',
+        endTime: record.endTime || '18:00',
+        hours: record.hours || 1,
+        minutes: record.minutes || 0,
+        note: record.note || ''
+      });
+      setEditingOvertimeId(record.id);
+    } else {
+      setOvertimeForm({
+        name: '', date: getTodayDateString(),
+        startTime: '09:00', endTime: '18:00',
+        hours: 1, minutes: 0, note: ''
+      });
+      setEditingOvertimeId(null);
+    }
+    setIsOvertimeFormOpen(true);
   };
-  const closeNoteForm = () => { setIsNoteFormOpen(false); setNoteContent(''); setEditingNoteId(null); };
 
-  const handleNoteSubmit = async () => {
-    if (!noteContent.trim() || !user) return;
-    setIsSubmittingNote(true);
+  const closeOvertimeForm = () => {
+    setIsOvertimeFormOpen(false);
+    setEditingOvertimeId(null);
+  };
+
+  const handleOvertimeSubmit = async () => {
+    if (!overtimeForm.name || !overtimeForm.date || !user) return;
+    setIsSubmittingOvertime(true);
+    const totalMinutes = overtimeForm.hours * 60 + overtimeForm.minutes;
+    const displayHours = `${overtimeForm.hours}小時${overtimeForm.minutes > 0 ? overtimeForm.minutes + '分鐘' : ''}`;
+    const saveData = {
+      name: overtimeForm.name,
+      branch: loggedInBranch,
+      date: overtimeForm.date,
+      startTime: overtimeForm.startTime,
+      endTime: overtimeForm.endTime,
+      hours: overtimeForm.hours,
+      minutes: overtimeForm.minutes,
+      totalMinutes,
+      displayHours,
+      note: overtimeForm.note
+    };
     try {
-      if (editingNoteId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', editingNoteId), { content: noteContent.trim(), updatedAt: serverTimestamp() });
-      else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'notes'), { content: noteContent.trim(), branch: loggedInBranch, dateTime: getNowDateTimeString(), createdAt: serverTimestamp() });
-      closeNoteForm();
-    } catch {} finally { setIsSubmittingNote(false); }
+      if (editingOvertimeId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'overtime_records', editingOvertimeId), { ...saveData, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'overtime_records'), { ...saveData, createdAt: serverTimestamp() });
+      closeOvertimeForm();
+    } catch {} finally { setIsSubmittingOvertime(false); }
   };
 
-  const handleDeleteNote = async (id) => {
-    if (!user || !window.confirm('確定要刪除這筆備註嗎？')) return;
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'notes', id)); } catch {}
+  const handleDeleteOvertime = async (id) => {
+    if (!user || !window.confirm('確定要刪除這筆加班紀錄嗎？')) return;
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'overtime_records', id)); } catch {}
   };
 
   // ------------------------------------------
@@ -786,30 +830,44 @@ export default function App() {
                 );
                 })()}
               </div>
-            ) : activeTab === 'notes' ? (
-              /* --- 備註（只顯示本門店） --- */
+            ) : activeTab === 'overtime' ? (
+              /* --- ★ 加班紀錄（只顯示本門店） --- */
               <div className="mb-4">
                 {(() => {
-                  const filteredNotes = notes.filter(n => n.branch === loggedInBranch);
-                  return filteredNotes.length === 0 ? (
+                  const filteredOT = overtimeRecords.filter(r => r.branch === loggedInBranch);
+                  return filteredOT.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 text-sm">
-                    <MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                    <p>目前沒有任何備註</p>
-                    <p className="text-xs mt-1">點擊右下角 + 新增備註</p>
+                    <ClockIcon className="w-10 h-10 mx-auto mb-3 text-red-300" />
+                    <p>目前沒有任何加班紀錄</p>
+                    <p className="text-xs mt-1">點擊右下角 + 新增加班</p>
                   </div>
                 ) : (
                   <div className="space-y-3 pt-2">
-                    {filteredNotes.map((note) => (
-                      <div key={note.id} className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-400"><Calendar className="w-3.5 h-3.5" /><span>{note.dateTime}</span></div>
+                    {filteredOT.map((rec) => (
+                      <div key={rec.id} className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-50 overflow-hidden">
+                        <div className="bg-red-500 px-4 py-2 flex justify-between items-center">
+                          <span className="text-white text-sm font-bold">{rec.name}</span>
                           <div className="flex items-center gap-2.5">
-                            <button onClick={() => openNoteForm(note)} className="text-gray-300 hover:text-blue-500 transition"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteNote(note.id)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => openOvertimeForm(rec)} className="text-red-200 hover:text-white transition"><Edit2 className="w-4 h-4" /></button>
+                            <button onClick={() => handleDeleteOvertime(rec.id)} className="text-red-200 hover:text-white transition"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
-                        {note.branch && <div className="mb-2"><span className="inline-block bg-gray-200 text-gray-600 text-[11px] font-medium px-2 py-0.5 rounded-full">{note.branch}</span></div>}
-                        <p className="text-[13px] text-gray-700 leading-relaxed break-words whitespace-pre-wrap">{note.content}</p>
+                        <div className="p-4 space-y-2">
+                          <div className="flex items-center text-xs text-gray-500">
+                            <Calendar className="w-3.5 h-3.5 mr-2 shrink-0" />
+                            <span>{rec.date}</span>
+                          </div>
+                          <div className="flex items-center text-xs text-gray-500">
+                            <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
+                            <span>{rec.startTime} - {rec.endTime}</span>
+                            <span className="ml-auto bg-red-100 text-red-600 text-[11px] font-bold px-2 py-0.5 rounded-full">{rec.displayHours}</span>
+                          </div>
+                          {rec.note && (
+                            <div className="bg-gray-50 p-2.5 rounded-lg mt-1">
+                              <p className="text-[13px] text-gray-600 break-words">{rec.note}</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -955,7 +1013,7 @@ export default function App() {
         {/* FAB — 管理員後台時隱藏 */}
         {!isBackendOpen && loggedInBranch !== '__admin__' && activeTab !== 'stats' && (
           <button onClick={handleFabClick}
-            className="absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 bg-[#333333] text-white hover:bg-black active:scale-95">
+            className={`absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 hover:opacity-90 active:scale-95 ${activeTab === 'overtime' ? 'bg-red-500 text-white' : 'bg-[#333333] text-white'}`}>
             <Plus className="w-7 h-7" />
           </button>
         )}
@@ -996,7 +1054,7 @@ export default function App() {
         {/* ★ 底部導航列（三個分頁）— 管理員後台時隱藏 */}
         <nav className={`absolute bottom-0 w-full bg-white px-4 py-4 flex justify-center items-center gap-2 rounded-t-[36px] shadow-[0_-10px_40px_rgba(0,0,0,0.06)] z-10 pb-8 ${isBackendOpen ? 'hidden' : ''}`}>
           <div onClick={() => { 
-              setIsFormOpen(false); setIsNoteFormOpen(false);
+              setIsFormOpen(false); setIsOvertimeFormOpen(false);
               if (activeTab !== 'leave') { 
                 setIsBackendOpen(false); setActiveTab('leave'); setShowLeaveFilterMenu(false); 
               } else { 
@@ -1007,12 +1065,12 @@ export default function App() {
             <List className="w-4 h-4" />
             <span className="text-[13px] font-medium">假單總覽</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('notes'); setIsFormOpen(false); setIsNoteFormOpen(false); setShowLeaveFilterMenu(false); }}
-            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'notes' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-[13px] font-medium">備註</span>
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('overtime'); setIsFormOpen(false); setIsOvertimeFormOpen(false); setShowLeaveFilterMenu(false); }}
+            className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'overtime' && !isBackendOpen ? 'bg-red-500 text-white shadow-md' : 'bg-red-50 text-red-500 hover:bg-red-100'}`}>
+            <ClockIcon className="w-4 h-4" />
+            <span className="text-[13px] font-medium">加班</span>
           </div>
-          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); setIsFormOpen(false); setIsNoteFormOpen(false); setShowLeaveFilterMenu(false); }}
+          <div onClick={() => { setIsBackendOpen(false); setActiveTab('stats'); setIsFormOpen(false); setIsOvertimeFormOpen(false); setShowLeaveFilterMenu(false); }}
             className={`flex-1 px-2 py-3 rounded-full flex items-center justify-center gap-1.5 cursor-pointer transition ${activeTab === 'stats' && !isBackendOpen ? 'bg-[#333333] text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             <BarChart3 className="w-4 h-4" />
             <span className="text-[13px] font-medium">統計</span>
@@ -1107,31 +1165,91 @@ export default function App() {
         </div>
         )}
 
-        {/* 備註表單 Modal */}
-        {isNoteFormOpen && (
-        <div className="absolute inset-x-0 bottom-0 bg-white z-[55] rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] h-[60%] flex flex-col">
-          <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-gray-800">{editingNoteId ? '編輯備註' : '新增備註'}</h2>
-            <button onClick={closeNoteForm} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X className="w-5 h-5" /></button>
+        {/* ★ 加班表單 Modal */}
+        {isOvertimeFormOpen && (
+        <div className="absolute inset-x-0 bottom-0 bg-white z-[55] rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] h-[85%] flex flex-col">
+          <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-red-100">
+            <h2 className="text-lg font-bold text-red-600">{editingOvertimeId ? '編輯加班' : '新增加班'}</h2>
+            <button onClick={closeOvertimeForm} className="p-2 bg-red-50 rounded-full text-red-400 hover:bg-red-100"><X className="w-5 h-5" /></button>
           </div>
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            <div className="flex items-center gap-2 mb-4 bg-gray-50 px-4 py-3 rounded-xl">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-500 font-medium">{getNowDateTimeString()}</span>
-              <span className="text-[11px] text-gray-400 ml-auto">自動偵測</span>
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+
+            {/* 員工姓名 */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">員工姓名</label>
+              {employees.length > 0 ? (
+                <div className="relative">
+                  <select value={overtimeForm.name} onChange={e => setOvertimeForm(p => ({...p, name: e.target.value}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
+                    <option value="" disabled>請選擇員工</option>
+                    {employees.map(emp => <option key={emp} value={emp}>{emp}</option>)}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              ) : (
+                <input type="text" value={overtimeForm.name} onChange={e => setOvertimeForm(p => ({...p, name: e.target.value}))}
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" placeholder="輸入姓名" />
+              )}
             </div>
-            {loggedInBranch && loggedInBranch !== '__admin__' && (
-              <div className="flex items-center gap-2 mb-4">
-                <span className="inline-block bg-gray-200 text-gray-600 text-xs font-medium px-3 py-1 rounded-full">{loggedInBranch}</span>
+
+            {/* 加班日期 */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">加班日期</label>
+              <input type="date" value={overtimeForm.date} onChange={e => setOvertimeForm(p => ({...p, date: e.target.value}))}
+                className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+            </div>
+
+            {/* 上班 / 下班時間 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">上班時間</label>
+                <input type="time" value={overtimeForm.startTime} onChange={e => setOvertimeForm(p => ({...p, startTime: e.target.value}))}
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
               </div>
-            )}
-            <textarea value={noteContent} onChange={e => setNoteContent(e.target.value)} rows="6"
-              className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none" placeholder="輸入備註內容..." autoFocus></textarea>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">下班時間</label>
+                <input type="time" value={overtimeForm.endTime} onChange={e => setOvertimeForm(p => ({...p, endTime: e.target.value}))}
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+              </div>
+            </div>
+
+            {/* ★ 加班時數（滾輪式，15分鐘為單位） */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">加班時數</label>
+              <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                <div className="flex-1 text-center">
+                  <label className="text-[10px] text-gray-400 block mb-1">小時</label>
+                  <select value={overtimeForm.hours} onChange={e => setOvertimeForm(p => ({...p, hours: Number(e.target.value)}))}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2 text-center text-lg font-bold text-gray-800 outline-none appearance-none">
+                    {[0,1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <span className="text-2xl font-bold text-gray-400 pt-4">:</span>
+                <div className="flex-1 text-center">
+                  <label className="text-[10px] text-gray-400 block mb-1">分鐘</label>
+                  <select value={overtimeForm.minutes} onChange={e => setOvertimeForm(p => ({...p, minutes: Number(e.target.value)}))}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2 text-center text-lg font-bold text-gray-800 outline-none appearance-none">
+                    {[0,15,30,45].map(m => <option key={m} value={m}>{String(m).padStart(2,'0')}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="text-center text-sm text-red-500 font-bold mt-1">
+                共 {overtimeForm.hours} 小時 {overtimeForm.minutes > 0 ? `${overtimeForm.minutes} 分鐘` : ''}
+              </div>
+            </div>
+
+            {/* 備註 */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">備註</label>
+              <textarea value={overtimeForm.note} onChange={e => setOvertimeForm(p => ({...p, note: e.target.value}))} rows="2"
+                className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none resize-none" placeholder="選填，輸入備註..."></textarea>
+            </div>
+
           </div>
           <div className="p-6 bg-white border-t border-gray-50 pb-10">
-            <button onClick={handleNoteSubmit} disabled={isSubmittingNote || !noteContent.trim()}
-              className="w-full bg-[#333333] hover:bg-black disabled:bg-gray-300 text-white py-4 rounded-2xl font-bold tracking-wide transition shadow-lg flex justify-center items-center gap-2">
-              {isSubmittingNote ? '處理中...' : <><Check className="w-5 h-5"/> {editingNoteId ? '儲存修改' : '確認新增'}</>}
+            <button onClick={handleOvertimeSubmit} disabled={isSubmittingOvertime || !overtimeForm.name || !overtimeForm.date}
+              className="w-full bg-red-500 hover:bg-red-600 disabled:bg-gray-300 text-white py-4 rounded-2xl font-bold tracking-wide transition shadow-lg flex justify-center items-center gap-2">
+              {isSubmittingOvertime ? '處理中...' : <><Check className="w-5 h-5"/> {editingOvertimeId ? '儲存修改' : '確認送出'}</>}
             </button>
           </div>
         </div>
