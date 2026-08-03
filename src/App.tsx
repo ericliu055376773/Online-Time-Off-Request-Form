@@ -402,7 +402,7 @@ export default function App() {
       setOvertimeForm({
         name: '', date: getTodayDateString(),
         shift1Start: '09:00', shift1End: '18:00',
-        shift2Enabled: false, shift2Start: '00:00', shift2End: '00:00',
+        shift2Enabled: false, shift2Start: '00:00', shift2End: '18:00',
         hours: 0, minutes: 0, note: ''
       });
       setEditingOvertimeId(null);
@@ -827,7 +827,7 @@ export default function App() {
                           </div>
                           <div className="space-y-1.5 mb-3">
                             <div className="flex items-center text-xs text-gray-400"><Calendar className="w-3.5 h-3.5 mr-2 shrink-0" /><span className="truncate">{new Date(req.startDate).toLocaleDateString('zh-TW')} - {new Date(req.endDate).toLocaleDateString('zh-TW')}</span></div>
-                            <div className="flex items-center text-xs text-gray-400"><ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" /><span>時長：{calculateDuration(req.startDate, req.endDate)} ({req.leaveType})</span></div>
+                            <div className="flex items-center text-xs text-gray-400"><ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" /><span>{new Date(req.startDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})} - {new Date(req.endDate).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})} ({req.leaveType})</span></div>
                           </div>
                           {req.photoBase64 && (<div className="mb-3 rounded-lg overflow-hidden border border-gray-100 max-h-32 bg-gray-50 flex justify-center"><img src={req.photoBase64} alt="" className="object-cover h-full w-full" /></div>)}
                           <div className="bg-gray-50/80 p-2.5 rounded-lg border border-gray-50">
@@ -869,14 +869,12 @@ export default function App() {
                           </div>
                           <div className="flex items-center text-xs text-gray-500">
                             <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
-                            <span>時段一：{rec.shift1Start || rec.startTime} - {rec.shift1End || rec.endTime}</span>
+                            <span>應下班：{rec.shift1End || rec.endTime || '--'}</span>
                           </div>
-                          {rec.shift2Enabled && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
-                              <span>時段二：{rec.shift2Start} - {rec.shift2End}</span>
-                            </div>
-                          )}
+                          <div className="flex items-center text-xs text-red-500 font-medium">
+                            <ClockIcon className="w-3.5 h-3.5 mr-2 shrink-0" />
+                            <span>實際下班：{rec.shift2End || '--'}</span>
+                          </div>
                           <div className="flex items-center text-xs text-gray-500">
                             <span className="ml-auto bg-red-100 text-red-600 text-[11px] font-bold px-2 py-0.5 rounded-full">{rec.displayHours}</span>
                           </div>
@@ -1217,78 +1215,34 @@ export default function App() {
                 className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
             </div>
 
-            {/* ★ 時段一 */}
+            {/* ★ 應下班時間 */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">時段一</label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] text-gray-400 ml-1">上班</label>
-                  <div className="flex gap-1">
-                    <select value={overtimeForm.shift1Start.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift1Start: e.target.value + ':' + p.shift1Start.split(':')[1]}))}
-                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                      {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
-                    </select>
-                    <select value={overtimeForm.shift1Start.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift1Start: p.shift1Start.split(':')[0] + ':' + e.target.value}))}
-                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                      {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-400 ml-1">下班</label>
-                  <div className="flex gap-1">
-                    <select value={overtimeForm.shift1End.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift1End: e.target.value + ':' + p.shift1End.split(':')[1]}))}
-                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                      {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
-                    </select>
-                    <select value={overtimeForm.shift1End.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift1End: p.shift1End.split(':')[0] + ':' + e.target.value}))}
-                      className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                      {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
-                    </select>
-                  </div>
-                </div>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">應下班時間</label>
+              <div className="flex gap-2">
+                <select value={overtimeForm.shift1End.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift1End: e.target.value + ':' + p.shift1End.split(':')[1]}))}
+                  className="flex-1 bg-gray-50 border-none rounded-xl px-3 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                  {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
+                </select>
+                <select value={overtimeForm.shift1End.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift1End: p.shift1End.split(':')[0] + ':' + e.target.value}))}
+                  className="flex-1 bg-gray-50 border-none rounded-xl px-3 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                  {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
+                </select>
               </div>
             </div>
 
-            {/* ★ 時段二（可開關） */}
+            {/* ★ 實際下班時間 */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between ml-1">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">時段二</label>
-                <button type="button" onClick={() => setOvertimeForm(p => ({...p, shift2Enabled: !p.shift2Enabled}))}
-                  className={`text-xs font-bold px-3 py-1 rounded-full transition ${overtimeForm.shift2Enabled ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                  {overtimeForm.shift2Enabled ? '已啟用' : '無（點擊啟用）'}
-                </button>
+              <label className="text-xs font-bold text-red-500 uppercase tracking-wider ml-1">實際下班時間</label>
+              <div className="flex gap-2">
+                <select value={overtimeForm.shift2End.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift2End: e.target.value + ':' + p.shift2End.split(':')[1]}))}
+                  className="flex-1 bg-red-50 border-2 border-red-200 rounded-xl px-3 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                  {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
+                </select>
+                <select value={overtimeForm.shift2End.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift2End: p.shift2End.split(':')[0] + ':' + e.target.value}))}
+                  className="flex-1 bg-red-50 border-2 border-red-200 rounded-xl px-3 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
+                  {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
+                </select>
               </div>
-              {overtimeForm.shift2Enabled && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] text-gray-400 ml-1">上班</label>
-                    <div className="flex gap-1">
-                      <select value={overtimeForm.shift2Start.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift2Start: e.target.value + ':' + p.shift2Start.split(':')[1]}))}
-                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                        {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
-                      </select>
-                      <select value={overtimeForm.shift2Start.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift2Start: p.shift2Start.split(':')[0] + ':' + e.target.value}))}
-                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                        {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-400 ml-1">下班</label>
-                    <div className="flex gap-1">
-                      <select value={overtimeForm.shift2End.split(':')[0]} onChange={e => setOvertimeForm(p => ({...p, shift2End: e.target.value + ':' + p.shift2End.split(':')[1]}))}
-                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                        {Array.from({length:24},(_,i)=>i).map(h => <option key={h} value={String(h).padStart(2,'0')}>{String(h).padStart(2,'0')}時</option>)}
-                      </select>
-                      <select value={overtimeForm.shift2End.split(':')[1]} onChange={e => setOvertimeForm(p => ({...p, shift2End: p.shift2End.split(':')[0] + ':' + e.target.value}))}
-                        className="flex-1 bg-gray-50 border-none rounded-lg px-2 py-3 text-sm font-bold text-gray-800 outline-none text-center appearance-none">
-                        {['00','15','30','45'].map(m => <option key={m} value={m}>{m}分</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* ★ 加班時數（滾輪式，15分鐘為單位） */}
