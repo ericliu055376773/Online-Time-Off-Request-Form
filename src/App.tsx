@@ -1023,10 +1023,11 @@ export default function App() {
                     </div>
                   );
                 })()}
+
+              </div>
             )}
           </div>
         )}
-
         {/* 管理員登入 Modal */}
         {showAdminLoginModal && (
           <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6" onClick={() => { setShowAdminLoginModal(false); setLoginError(''); }}>
