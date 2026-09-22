@@ -71,6 +71,7 @@ export default function App() {
   // UI 狀態
   const [activeTab, setActiveTab] = useState('leave'); // 'leave' | 'overtime' | 'stats'
   const [isBackendOpen, setIsBackendOpen] = useState(false);
+  const [isExpenseBackendMode, setIsExpenseBackendMode] = useState(false); // 季支出後台獨立頁面
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -797,7 +798,99 @@ export default function App() {
           // 後台
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-white rounded-t-3xl shadow-inner mt-2">
-            {isSettingsMode ? (
+            {isExpenseBackendMode ? (
+              /* ★ 季支出後台獨立頁面 */
+              <div className="space-y-6 pb-20">
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={() => setIsExpenseBackendMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
+                  <h2 className="text-lg font-bold text-amber-600">季支出管理</h2>
+                  <div className="w-6"></div>
+                </div>
+
+                {/* 商品名稱管理 */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">商品名稱管理</label>
+                  <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 space-y-2">
+                    {(config.expenseProducts || []).map((p, i) => (
+                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-amber-100 shadow-sm">
+                        <span className="text-sm font-medium text-gray-700">{p}</span>
+                        <button onClick={async () => {
+                          const updated = [...(config.expenseProducts || [])]; updated.splice(i, 1);
+                          try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProducts: updated }); } catch {}
+                        }} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-2">
+                      <input type="text" value={newExpenseProduct} onChange={e => setNewExpenseProduct(e.target.value)} placeholder="輸入新商品名稱..." className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
+                      <button onClick={async () => {
+                        if (!newExpenseProduct.trim()) return;
+                        const updated = [...(config.expenseProducts || []), newExpenseProduct.trim()];
+                        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProducts: updated }); setNewExpenseProduct(''); } catch {}
+                      }} className="bg-amber-500 text-white px-4 rounded-lg hover:bg-amber-600 transition">新增</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 各店支出總覽（風琴式 + 可編輯金額） */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">各店支出總覽</label>
+                  <div className="text-right text-sm font-bold text-amber-700 mb-1">全部合計：$ {expenseRecords.reduce((s,r) => s + (r.totalPrice||0), 0).toLocaleString()}</div>
+                  {(() => {
+                    const byBranch = getExpenseByBranch();
+                    const branches = Object.keys(byBranch);
+                    if (branches.length === 0) return <div className="text-center text-sm text-amber-400 py-8 bg-amber-50 rounded-xl">尚無支出紀錄</div>;
+                    return (
+                      <div className="space-y-2">
+                        {branches.map(b => {
+                          const isOpen = expandedExpenseBranch === b;
+                          const data = byBranch[b];
+                          return (
+                            <div key={b} className="bg-white rounded-xl border border-amber-100 overflow-hidden shadow-sm">
+                              <button onClick={() => setExpandedExpenseBranch(isOpen ? null : b)} className="w-full flex justify-between items-center px-4 py-3.5 text-left hover:bg-amber-50 transition">
+                                <span className="text-sm font-bold text-gray-700">{b}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-amber-600">$ {data.total.toLocaleString()}</span>
+                                  <span className="text-xs text-gray-400">{data.records.length} 筆</span>
+                                  <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                                </div>
+                              </button>
+                              {isOpen && (
+                                <div className="px-4 pb-3 space-y-2 border-t border-amber-50">
+                                  {data.records.map(rec => (
+                                    <div key={rec.id} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                                      <div className="flex justify-between items-center">
+                                        <div>
+                                          <span className="text-sm font-bold text-gray-700">{rec.productName}</span>
+                                          <span className="text-xs text-gray-400 ml-2">×{rec.quantity}</span>
+                                        </div>
+                                        <span className="text-xs text-gray-400">{rec.date}</span>
+                                      </div>
+                                      {/* 後台可編輯金額 */}
+                                      <div className="flex items-center gap-2">
+                                        <label className="text-xs text-gray-500 shrink-0">單價 $</label>
+                                        <input type="number" min="0" defaultValue={rec.unitPrice || 0}
+                                          onBlur={async (e) => {
+                                            const newPrice = Math.max(0, Number(e.target.value));
+                                            const newTotal = newPrice * (rec.quantity || 1);
+                                            try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', rec.id), { unitPrice: newPrice, totalPrice: newTotal }); } catch {}
+                                          }}
+                                          className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
+                                        <span className="text-sm font-bold text-amber-600 shrink-0">= $ {(rec.totalPrice || 0).toLocaleString()}</span>
+                                      </div>
+                                      {rec.note && <div className="text-xs text-gray-400">{rec.note}</div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : isSettingsMode ? (
               <div className="space-y-6 pb-20">
                 <div className="flex items-center justify-between mb-2">
                   <button onClick={() => setIsSettingsMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
@@ -895,54 +988,15 @@ export default function App() {
                     <div className="bg-white p-3 rounded-full shadow-sm"><Settings className="w-6 h-6 text-gray-700" /></div>
                     <span className="text-[15px] font-bold text-gray-800 tracking-wide">系統設定</span>
                   </button>
-                  {/* ★ 季支出總覽（風琴式各店） */}
-                  <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-white p-3 rounded-full shadow-sm"><DollarSign className="w-6 h-6 text-amber-600" /></div>
-                      <span className="text-[15px] font-bold text-amber-700 tracking-wide">季支出總覽</span>
-                      <span className="ml-auto text-xs text-amber-500 font-bold">$ {expenseRecords.reduce((s,r) => s + (r.totalPrice||0), 0).toLocaleString()}</span>
+                  {/* ★ 季支出管理入口 */}
+                  <button onClick={() => setIsExpenseBackendMode(true)} className="w-full bg-amber-50 p-5 rounded-2xl border border-amber-100 flex items-center gap-4 hover:bg-amber-100 transition-all active:scale-[0.98]">
+                    <div className="bg-white p-3 rounded-full shadow-sm"><DollarSign className="w-6 h-6 text-amber-600" /></div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] font-bold text-amber-700 tracking-wide block">季支出管理</span>
+                      <span className="text-xs text-amber-500">商品設定 · 各店支出總覽</span>
                     </div>
-                    {(() => {
-                      const byBranch = getExpenseByBranch();
-                      const branches = Object.keys(byBranch);
-                      if (branches.length === 0) return <div className="text-center text-sm text-amber-400 py-4">尚無支出紀錄</div>;
-                      return (
-                        <div className="space-y-2">
-                          {branches.map(b => {
-                            const isOpen = expandedExpenseBranch === b;
-                            const data = byBranch[b];
-                            return (
-                              <div key={b} className="bg-white rounded-xl border border-amber-100 overflow-hidden">
-                                <button onClick={() => setExpandedExpenseBranch(isOpen ? null : b)} className="w-full flex justify-between items-center px-4 py-3 text-left">
-                                  <span className="text-sm font-bold text-gray-700">{b}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-bold text-amber-600">$ {data.total.toLocaleString()}</span>
-                                    <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                                  </div>
-                                </button>
-                                {isOpen && (
-                                  <div className="px-4 pb-3 space-y-1.5 border-t border-amber-50">
-                                    {data.records.map(rec => (
-                                      <div key={rec.id} className="flex items-center justify-between py-2 text-xs border-b border-gray-50 last:border-0">
-                                        <div>
-                                          <span className="font-medium text-gray-700">{rec.productName}</span>
-                                          <span className="text-gray-400 ml-2">×{rec.quantity}</span>
-                                        </div>
-                                        <div className="text-right">
-                                          <span className="font-bold text-amber-600">$ {(rec.totalPrice||0).toLocaleString()}</span>
-                                          <span className="text-gray-400 block text-[10px]">{rec.date}</span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                    <ChevronRight className="w-5 h-5 text-amber-400" />
+                  </button>
 
                   <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 transition-all active:scale-[0.98]">
                     <div className="bg-white p-3 rounded-full shadow-sm text-red-500"><LogOut className="w-6 h-6" /></div>
@@ -1345,8 +1399,8 @@ export default function App() {
                 return (
                   <>
                     <div className="bg-amber-50 rounded-2xl p-4 mb-4 flex justify-between items-center border border-amber-100">
-                      <div><div className="text-xs text-amber-600 font-medium">{loggedInBranch} 總支出</div><div className="text-2xl font-bold text-amber-700 mt-1">$ {myTotal.toLocaleString()}</div></div>
-                      <DollarSign className="w-10 h-10 text-amber-300" />
+                      <div><div className="text-xs text-amber-600 font-medium">{loggedInBranch}</div><div className="text-lg font-bold text-amber-700 mt-1">支出紀錄 · {myExpenses.length} 筆</div></div>
+                      <ShoppingBag className="w-8 h-8 text-amber-300" />
                     </div>
                     {myExpenses.length === 0 ? (
                       <div className="text-center py-12 text-gray-400 text-sm"><ShoppingBag className="w-10 h-10 mx-auto mb-3 text-gray-300" /><p>尚無支出紀錄</p></div>
@@ -1357,13 +1411,12 @@ export default function App() {
                             <div className="flex justify-between items-start">
                               <div><div className="text-sm font-bold text-gray-800">{rec.productName}</div><div className="text-xs text-gray-400 mt-0.5">{rec.date}</div></div>
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-amber-600">$ {(rec.totalPrice || 0).toLocaleString()}</span>
                                 <button onClick={() => openExpenseForm(rec)} className="text-gray-300 hover:text-blue-500"><Edit2 className="w-3.5 h-3.5" /></button>
                                 <button onClick={() => handleDeleteExpense(rec.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                               </div>
                             </div>
                             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                              <span>單價 ${rec.unitPrice}</span><span>×</span><span>數量 {rec.quantity}</span>
+                              <span>數量 {rec.quantity}</span>
                               {rec.note && <span className="text-gray-400 ml-auto">{rec.note}</span>}
                             </div>
                           </div>
@@ -1400,21 +1453,10 @@ export default function App() {
                   <div className="bg-amber-50 p-3 rounded-xl text-xs text-amber-600">尚未新增商品，請管理員至後台設定</div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">數量</label>
-                  <input type="number" min="1" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(1, Number(e.target.value))}))}
-                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">單價 ($)</label>
-                  <input type="number" min="0" value={expenseForm.unitPrice} onChange={e => setExpenseForm(p => ({...p, unitPrice: Math.max(0, Number(e.target.value))}))}
-                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
-                </div>
-              </div>
-              <div className="bg-amber-50 rounded-xl p-3 text-center">
-                <span className="text-xs text-amber-600">小計：</span>
-                <span className="text-lg font-bold text-amber-700">$ {(expenseForm.quantity * expenseForm.unitPrice).toLocaleString()}</span>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">數量</label>
+                <input type="number" min="1" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(1, Number(e.target.value))}))}
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">備註（選填）</label>
