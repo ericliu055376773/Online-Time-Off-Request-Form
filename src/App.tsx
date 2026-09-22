@@ -122,11 +122,13 @@ export default function App() {
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState(null);
-  const [expenseForm, setExpenseForm] = useState({ productName: '', quantity: 1, unitPrice: 0, note: '' });
+  const [expenseForm, setExpenseForm] = useState({ productName: '', customProduct: '', unit: '', quantity: 1, unitPrice: 0, note: '' });
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [isExpenseMode, setIsExpenseMode] = useState(false);
   const [expandedExpenseBranch, setExpandedExpenseBranch] = useState(null);
   const [newExpenseProduct, setNewExpenseProduct] = useState('');
+  const [newExpenseUnit, setNewExpenseUnit] = useState('');
+  const [isExpenseProductSettings, setIsExpenseProductSettings] = useState(false); // 商品設定子頁面
 
   // ★ 員工管理
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -470,14 +472,16 @@ export default function App() {
   // ★ 季支出功能
   // ------------------------------------------
   const expenseProducts = config.expenseProducts || [];
+  const expenseUnits = config.expenseUnits || [];
 
   const openExpenseForm = (record = null) => {
     setIsFormOpen(false); setIsOvertimeFormOpen(false);
     if (record) {
-      setExpenseForm({ productName: record.productName || '', quantity: record.quantity || 1, unitPrice: record.unitPrice || 0, note: record.note || '' });
+      const isCustom = record.productName && !expenseProducts.includes(record.productName);
+      setExpenseForm({ productName: isCustom ? '其他' : (record.productName || ''), customProduct: isCustom ? record.productName : '', unit: record.unit || '', quantity: record.quantity || 1, unitPrice: record.unitPrice || 0, note: record.note || '' });
       setEditingExpenseId(record.id);
     } else {
-      setExpenseForm({ productName: '', quantity: 1, unitPrice: 0, note: '' });
+      setExpenseForm({ productName: '', customProduct: '', unit: '', quantity: 1, unitPrice: 0, note: '' });
       setEditingExpenseId(null);
     }
     setIsExpenseFormOpen(true);
@@ -485,12 +489,13 @@ export default function App() {
   const closeExpenseForm = () => { setIsExpenseFormOpen(false); setEditingExpenseId(null); };
 
   const handleExpenseSubmit = async () => {
-    if (!expenseForm.productName || !user) return;
+    const finalProduct = expenseForm.productName === '其他' ? expenseForm.customProduct.trim() : expenseForm.productName;
+    if (!finalProduct || !user) return;
     setIsSubmittingExpense(true);
     const totalPrice = expenseForm.quantity * expenseForm.unitPrice;
     const now = new Date(); const p = (n) => String(n).padStart(2,'0');
     const dateStr = `${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())}`;
-    const saveData = { ...expenseForm, totalPrice, branch: loggedInBranch, date: dateStr };
+    const saveData = { productName: finalProduct, unit: expenseForm.unit, quantity: expenseForm.quantity, unitPrice: expenseForm.unitPrice, note: expenseForm.note, totalPrice, branch: loggedInBranch, date: dateStr };
     try {
       if (editingExpenseId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', editingExpenseId), { ...saveData, updatedAt: serverTimestamp() });
       else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'expense_records'), { ...saveData, createdAt: serverTimestamp() });
@@ -520,6 +525,14 @@ export default function App() {
     if (!newExpenseProduct.trim()) return;
     setDraftConfig(prev => ({ ...prev, expenseProducts: [...(prev.expenseProducts || []), newExpenseProduct.trim()] }));
     setNewExpenseProduct('');
+  };
+  const handleAddExpenseUnit = () => {
+    if (!newExpenseUnit.trim()) return;
+    setDraftConfig(prev => ({ ...prev, expenseUnits: [...(prev.expenseUnits || []), newExpenseUnit.trim()] }));
+    setNewExpenseUnit('');
+  };
+  const handleRemoveExpenseUnit = (index) => {
+    setDraftConfig(prev => { const a = [...(prev.expenseUnits || [])]; a.splice(index, 1); return { ...prev, expenseUnits: a }; });
   };
   const handleRemoveExpenseProduct = (index) => {
     setDraftConfig(prev => { const a = [...(prev.expenseProducts || [])]; a.splice(index, 1); return { ...prev, expenseProducts: a }; });
@@ -799,11 +812,12 @@ export default function App() {
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-white rounded-t-3xl shadow-inner mt-2">
             {isExpenseBackendMode ? (
-              /* ★ 季支出後台獨立頁面 */
+              isExpenseProductSettings ? (
+              /* ★ 商品設定子頁面（齒輪進入） */
               <div className="space-y-6 pb-20">
                 <div className="flex items-center justify-between mb-2">
-                  <button onClick={() => setIsExpenseBackendMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
-                  <h2 className="text-lg font-bold text-amber-600">季支出管理</h2>
+                  <button onClick={() => setIsExpenseProductSettings(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
+                  <h2 className="text-lg font-bold text-amber-600">商品設定</h2>
                   <div className="w-6"></div>
                 </div>
 
@@ -815,6 +829,7 @@ export default function App() {
                       <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-amber-100 shadow-sm">
                         <span className="text-sm font-medium text-gray-700">{p}</span>
                         <button onClick={async () => {
+                          if (!window.confirm(`確定要刪除「${p}」嗎？刪除後無法復原。`)) return;
                           const updated = [...(config.expenseProducts || [])]; updated.splice(i, 1);
                           try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProducts: updated }); } catch {}
                         }} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
@@ -829,6 +844,40 @@ export default function App() {
                       }} className="bg-amber-500 text-white px-4 rounded-lg hover:bg-amber-600 transition">新增</button>
                     </div>
                   </div>
+                </div>
+
+                {/* ★ 單位名稱管理 */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">單位名稱管理</label>
+                  <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 space-y-2">
+                    {(config.expenseUnits || []).map((u, i) => (
+                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-amber-100 shadow-sm">
+                        <span className="text-sm font-medium text-gray-700">{u}</span>
+                        <button onClick={async () => {
+                          if (!window.confirm(`確定要刪除單位「${u}」嗎？`)) return;
+                          const updated = [...(config.expenseUnits || [])]; updated.splice(i, 1);
+                          try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseUnits: updated }); } catch {}
+                        }} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-2">
+                      <input type="text" value={newExpenseUnit} onChange={e => setNewExpenseUnit(e.target.value)} placeholder="輸入新單位（如：包、瓶、箱）..." className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
+                      <button onClick={async () => {
+                        if (!newExpenseUnit.trim()) return;
+                        const updated = [...(config.expenseUnits || []), newExpenseUnit.trim()];
+                        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseUnits: updated }); setNewExpenseUnit(''); } catch {}
+                      }} className="bg-amber-500 text-white px-4 rounded-lg hover:bg-amber-600 transition">新增</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              ) : (
+              /* ★ 季支出後台主頁 */
+              <div className="space-y-6 pb-20">
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={() => setIsExpenseBackendMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
+                  <h2 className="text-lg font-bold text-amber-600">季支出管理</h2>
+                  <button onClick={() => setIsExpenseProductSettings(true)} className="p-2 -mr-2 text-amber-500 hover:bg-amber-50 rounded-full transition"><Settings className="w-5 h-5" /></button>
                 </div>
 
                 {/* 各店支出總覽（風琴式 + 可編輯金額） */}
@@ -890,6 +939,7 @@ export default function App() {
                   })()}
                 </div>
               </div>
+              )
             ) : isSettingsMode ? (
               <div className="space-y-6 pb-20">
                 <div className="flex items-center justify-between mb-2">
@@ -1412,7 +1462,7 @@ export default function App() {
                               </div>
                             </div>
                             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                              <span>數量 {rec.quantity}</span>
+                              <span>數量 {rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
                               {rec.note && <span className="text-gray-400 ml-auto">{rec.note}</span>}
                             </div>
                           </div>
@@ -1436,23 +1486,37 @@ export default function App() {
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">商品名稱</label>
-                {expenseProducts.length > 0 ? (
+                <div className="relative">
+                  <select value={expenseForm.productName} onChange={e => setExpenseForm(p => ({...p, productName: e.target.value, customProduct: ''}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
+                    <option value="" disabled>請選擇商品</option>
+                    {expenseProducts.map(p => <option key={p} value={p}>{p}</option>)}
+                    <option value="其他">其他（手動輸入）</option>
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                {expenseForm.productName === '其他' && (
+                  <input type="text" value={expenseForm.customProduct} onChange={e => setExpenseForm(p => ({...p, customProduct: e.target.value}))}
+                    className="w-full bg-gray-50 border-2 border-amber-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none mt-2" placeholder="請輸入商品名稱..." />
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">數量</label>
+                  <input type="number" min="1" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(1, Number(e.target.value))}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">單位</label>
                   <div className="relative">
-                    <select value={expenseForm.productName} onChange={e => setExpenseForm(p => ({...p, productName: e.target.value}))}
+                    <select value={expenseForm.unit} onChange={e => setExpenseForm(p => ({...p, unit: e.target.value}))}
                       className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
-                      <option value="" disabled>請選擇商品</option>
-                      {expenseProducts.map(p => <option key={p} value={p}>{p}</option>)}
+                      <option value="">選擇單位</option>
+                      {expenseUnits.map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
                     <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
-                ) : (
-                  <div className="bg-amber-50 p-3 rounded-xl text-xs text-amber-600">尚未新增商品，請管理員至後台設定</div>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">數量</label>
-                <input type="number" min="1" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(1, Number(e.target.value))}))}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">備註（選填）</label>
