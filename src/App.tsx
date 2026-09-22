@@ -6,7 +6,7 @@ import {
   ChevronLeft, List, Clock as ClockIcon, 
   Plus, X, Check, Calendar, Trash2,
   Settings, Save, Edit2, LogOut, Camera, Lock, Eye, EyeOff, ChevronDown,
-  FileText, Users, BarChart3
+  FileText, Users, BarChart3, DollarSign, ChevronRight, ShoppingBag
 } from 'lucide-react';
 
 // ==========================================
@@ -116,6 +116,17 @@ export default function App() {
     note: ''
   });
 
+  // ★ 季支出
+  const [expenseRecords, setExpenseRecords] = useState([]);
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
+  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [expenseForm, setExpenseForm] = useState({ productName: '', quantity: 1, unitPrice: 0, note: '' });
+  const [showFabMenu, setShowFabMenu] = useState(false);
+  const [isExpenseMode, setIsExpenseMode] = useState(false);
+  const [expandedExpenseBranch, setExpandedExpenseBranch] = useState(null);
+  const [newExpenseProduct, setNewExpenseProduct] = useState('');
+
   // ★ 員工管理
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
   const [newEmployeeName, setNewEmployeeName] = useState('');
@@ -196,6 +207,13 @@ export default function App() {
       setOvertimeRecords(data);
     }, (err) => console.error("讀取加班紀錄失敗:", err));
 
+    // ★ 讀取季支出紀錄
+    const unsubExpense = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'expense_records'), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a, b) => { const dA = a.createdAt?.toDate?.() || new Date(0); const dB = b.createdAt?.toDate?.() || new Date(0); return dB - dA; });
+      setExpenseRecords(data);
+    }, (err) => console.error("讀取支出失敗:", err));
+
     const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -213,7 +231,7 @@ export default function App() {
       setConfigLoaded(true);
     }, (err) => { console.error("讀取設定失敗:", err); setConfigLoaded(true); });
 
-    return () => { unsubLeave(); unsubOvertime(); unsubConfig(); };
+    return () => { unsubLeave(); unsubOvertime(); unsubExpense(); unsubConfig(); };
   }, [user]);
 
   // ------------------------------------------
@@ -445,6 +463,65 @@ export default function App() {
   const handleDeleteOvertime = async (id) => {
     if (!user || !window.confirm('確定要刪除這筆加班紀錄嗎？')) return;
     try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'overtime_records', id)); } catch {}
+  };
+
+  // ------------------------------------------
+  // ★ 季支出功能
+  // ------------------------------------------
+  const expenseProducts = config.expenseProducts || [];
+
+  const openExpenseForm = (record = null) => {
+    setIsFormOpen(false); setIsOvertimeFormOpen(false);
+    if (record) {
+      setExpenseForm({ productName: record.productName || '', quantity: record.quantity || 1, unitPrice: record.unitPrice || 0, note: record.note || '' });
+      setEditingExpenseId(record.id);
+    } else {
+      setExpenseForm({ productName: '', quantity: 1, unitPrice: 0, note: '' });
+      setEditingExpenseId(null);
+    }
+    setIsExpenseFormOpen(true);
+  };
+  const closeExpenseForm = () => { setIsExpenseFormOpen(false); setEditingExpenseId(null); };
+
+  const handleExpenseSubmit = async () => {
+    if (!expenseForm.productName || !user) return;
+    setIsSubmittingExpense(true);
+    const totalPrice = expenseForm.quantity * expenseForm.unitPrice;
+    const now = new Date(); const p = (n) => String(n).padStart(2,'0');
+    const dateStr = `${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())}`;
+    const saveData = { ...expenseForm, totalPrice, branch: loggedInBranch, date: dateStr };
+    try {
+      if (editingExpenseId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', editingExpenseId), { ...saveData, updatedAt: serverTimestamp() });
+      else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'expense_records'), { ...saveData, createdAt: serverTimestamp() });
+      closeExpenseForm();
+    } catch {} finally { setIsSubmittingExpense(false); }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!user || !window.confirm('確定要刪除這筆支出嗎？')) return;
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', id)); } catch {}
+  };
+
+  // 各門店支出統計（風琴式用）
+  const getExpenseByBranch = () => {
+    const map = {};
+    expenseRecords.forEach(r => {
+      const b = r.branch || '未知';
+      if (!map[b]) map[b] = { records: [], total: 0 };
+      map[b].records.push(r);
+      map[b].total += (r.totalPrice || 0);
+    });
+    return map;
+  };
+
+  // 後台：新增/刪除支出商品
+  const handleAddExpenseProduct = () => {
+    if (!newExpenseProduct.trim()) return;
+    setDraftConfig(prev => ({ ...prev, expenseProducts: [...(prev.expenseProducts || []), newExpenseProduct.trim()] }));
+    setNewExpenseProduct('');
+  };
+  const handleRemoveExpenseProduct = (index) => {
+    setDraftConfig(prev => { const a = [...(prev.expenseProducts || [])]; a.splice(index, 1); return { ...prev, expenseProducts: a }; });
   };
 
   // ------------------------------------------
@@ -787,6 +864,23 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* ★ 季支出商品管理 */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">季支出商品管理</label>
+                  <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 space-y-2">
+                    {(draftConfig.expenseProducts || []).map((p, i) => (
+                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-amber-100 shadow-sm">
+                        <span className="text-sm font-medium text-gray-700">{p}</span>
+                        <button onClick={() => handleRemoveExpenseProduct(i)} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-2">
+                      <input type="text" value={newExpenseProduct} onChange={e => setNewExpenseProduct(e.target.value)} placeholder="輸入新商品名稱..." className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
+                      <button onClick={handleAddExpenseProduct} className="bg-amber-500 text-white px-4 rounded-lg hover:bg-amber-600 transition">新增</button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pt-4 pb-10">
                   <button onClick={handleSaveConfig} disabled={isSavingConfig} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-bold tracking-wide transition shadow-lg shadow-blue-600/20 flex justify-center items-center gap-2">
                     {isSavingConfig ? '儲存中...' : <><Save className="w-5 h-5"/> 儲存設定</>}
@@ -801,6 +895,55 @@ export default function App() {
                     <div className="bg-white p-3 rounded-full shadow-sm"><Settings className="w-6 h-6 text-gray-700" /></div>
                     <span className="text-[15px] font-bold text-gray-800 tracking-wide">系統設定</span>
                   </button>
+                  {/* ★ 季支出總覽（風琴式各店） */}
+                  <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="bg-white p-3 rounded-full shadow-sm"><DollarSign className="w-6 h-6 text-amber-600" /></div>
+                      <span className="text-[15px] font-bold text-amber-700 tracking-wide">季支出總覽</span>
+                      <span className="ml-auto text-xs text-amber-500 font-bold">$ {expenseRecords.reduce((s,r) => s + (r.totalPrice||0), 0).toLocaleString()}</span>
+                    </div>
+                    {(() => {
+                      const byBranch = getExpenseByBranch();
+                      const branches = Object.keys(byBranch);
+                      if (branches.length === 0) return <div className="text-center text-sm text-amber-400 py-4">尚無支出紀錄</div>;
+                      return (
+                        <div className="space-y-2">
+                          {branches.map(b => {
+                            const isOpen = expandedExpenseBranch === b;
+                            const data = byBranch[b];
+                            return (
+                              <div key={b} className="bg-white rounded-xl border border-amber-100 overflow-hidden">
+                                <button onClick={() => setExpandedExpenseBranch(isOpen ? null : b)} className="w-full flex justify-between items-center px-4 py-3 text-left">
+                                  <span className="text-sm font-bold text-gray-700">{b}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-bold text-amber-600">$ {data.total.toLocaleString()}</span>
+                                    <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                                  </div>
+                                </button>
+                                {isOpen && (
+                                  <div className="px-4 pb-3 space-y-1.5 border-t border-amber-50">
+                                    {data.records.map(rec => (
+                                      <div key={rec.id} className="flex items-center justify-between py-2 text-xs border-b border-gray-50 last:border-0">
+                                        <div>
+                                          <span className="font-medium text-gray-700">{rec.productName}</span>
+                                          <span className="text-gray-400 ml-2">×{rec.quantity}</span>
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="font-bold text-amber-600">$ {(rec.totalPrice||0).toLocaleString()}</span>
+                                          <span className="text-gray-400 block text-[10px]">{rec.date}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                   <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 transition-all active:scale-[0.98]">
                     <div className="bg-white p-3 rounded-full shadow-sm text-red-500"><LogOut className="w-6 h-6" /></div>
                     <span className="text-[15px] font-bold text-red-600 tracking-wide">登出管理員帳號</span>
@@ -1104,12 +1247,28 @@ export default function App() {
           </div>
         )}
 
-        {/* FAB — 管理員後台時隱藏 */}
-        {!isBackendOpen && loggedInBranch !== '__admin__' && activeTab !== 'stats' && (
-          <button onClick={handleFabClick}
-            className={`absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-transform duration-300 z-30 hover:opacity-90 active:scale-95 ${activeTab === 'overtime' ? 'bg-red-500 text-white' : 'bg-[#333333] text-white'}`}>
-            <Plus className="w-7 h-7" />
-          </button>
+        {/* FAB 區域 — 管理員後台時隱藏 */}
+        {!isBackendOpen && loggedInBranch !== '__admin__' && activeTab !== 'stats' && !isExpenseMode && (
+          <>
+            {/* 子選單遮罩 */}
+            {showFabMenu && <div className="absolute inset-0 z-25" onClick={() => setShowFabMenu(false)}></div>}
+            {/* 子選單按鈕 */}
+            <div className={`absolute bottom-[185px] right-6 flex flex-col items-end gap-2.5 z-30 transition-all duration-200 ${showFabMenu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+              <button onClick={() => { setShowFabMenu(false); handleFabClick(); }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg text-sm font-bold ${activeTab === 'overtime' ? 'bg-red-500 text-white' : 'bg-[#333333] text-white'}`}>
+                <Plus className="w-4 h-4" />{activeTab === 'overtime' ? '新增加班' : '新增假單'}
+              </button>
+              <button onClick={() => { setShowFabMenu(false); setIsExpenseMode(true); }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg text-sm font-bold bg-amber-500 text-white">
+                <DollarSign className="w-4 h-4" />季支出
+              </button>
+            </div>
+            {/* FAB 主按鈕 */}
+            <button onClick={() => setShowFabMenu(!showFabMenu)}
+              className={`absolute bottom-[120px] right-6 w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.15)] transition-all duration-300 z-30 hover:opacity-90 active:scale-95 ${showFabMenu ? 'bg-white text-gray-800 rotate-45' : activeTab === 'overtime' ? 'bg-red-500 text-white' : 'bg-[#333333] text-white'}`}>
+              <Plus className="w-7 h-7" />
+            </button>
+          </>
         )}
 
         {/* ★ 假單篩選彈出選單 */}
@@ -1170,6 +1329,107 @@ export default function App() {
             <span className="text-[13px] font-medium">統計</span>
           </div>
         </nav>
+
+        {/* ★ 季支出頁面（全屏覆蓋） */}
+        {isExpenseMode && (
+          <div className="absolute inset-0 bg-[#f8f9fa] z-40 flex flex-col">
+            <header className="flex justify-between items-center px-6 pt-12 pb-4 bg-[#f8f9fa]">
+              <button onClick={() => setIsExpenseMode(false)} className="text-sm text-gray-500 font-medium flex items-center gap-1"><ChevronLeft className="w-4 h-4" />返回</button>
+              <h1 className="text-lg font-bold text-amber-600 flex items-center gap-1.5"><DollarSign className="w-5 h-5" />季支出</h1>
+              <button onClick={() => openExpenseForm()} className="text-sm text-amber-600 font-bold">+ 新增</button>
+            </header>
+            <div className="flex-1 overflow-y-auto px-6 pb-20">
+              {(() => {
+                const myExpenses = expenseRecords.filter(r => r.branch === loggedInBranch);
+                const myTotal = myExpenses.reduce((s, r) => s + (r.totalPrice || 0), 0);
+                return (
+                  <>
+                    <div className="bg-amber-50 rounded-2xl p-4 mb-4 flex justify-between items-center border border-amber-100">
+                      <div><div className="text-xs text-amber-600 font-medium">{loggedInBranch} 總支出</div><div className="text-2xl font-bold text-amber-700 mt-1">$ {myTotal.toLocaleString()}</div></div>
+                      <DollarSign className="w-10 h-10 text-amber-300" />
+                    </div>
+                    {myExpenses.length === 0 ? (
+                      <div className="text-center py-12 text-gray-400 text-sm"><ShoppingBag className="w-10 h-10 mx-auto mb-3 text-gray-300" /><p>尚無支出紀錄</p></div>
+                    ) : (
+                      <div className="space-y-2">
+                        {myExpenses.map(rec => (
+                          <div key={rec.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                            <div className="flex justify-between items-start">
+                              <div><div className="text-sm font-bold text-gray-800">{rec.productName}</div><div className="text-xs text-gray-400 mt-0.5">{rec.date}</div></div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-amber-600">$ {(rec.totalPrice || 0).toLocaleString()}</span>
+                                <button onClick={() => openExpenseForm(rec)} className="text-gray-300 hover:text-blue-500"><Edit2 className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => handleDeleteExpense(rec.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                              <span>單價 ${rec.unitPrice}</span><span>×</span><span>數量 {rec.quantity}</span>
+                              {rec.note && <span className="text-gray-400 ml-auto">{rec.note}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ★ 季支出表單 Modal */}
+        {isExpenseFormOpen && (
+          <div className="absolute inset-x-0 bottom-0 bg-white z-[55] rounded-t-[36px] shadow-[0_-20px_50px_rgba(0,0,0,0.1)] h-[65%] flex flex-col">
+            <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-amber-100">
+              <h2 className="text-lg font-bold text-amber-600">{editingExpenseId ? '編輯支出' : '新增支出'}</h2>
+              <button onClick={closeExpenseForm} className="p-2 bg-amber-50 rounded-full text-amber-400 hover:bg-amber-100"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">商品名稱</label>
+                {expenseProducts.length > 0 ? (
+                  <div className="relative">
+                    <select value={expenseForm.productName} onChange={e => setExpenseForm(p => ({...p, productName: e.target.value}))}
+                      className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none appearance-none">
+                      <option value="" disabled>請選擇商品</option>
+                      {expenseProducts.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                ) : (
+                  <div className="bg-amber-50 p-3 rounded-xl text-xs text-amber-600">尚未新增商品，請管理員至後台設定</div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">數量</label>
+                  <input type="number" min="1" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(1, Number(e.target.value))}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">單價 ($)</label>
+                  <input type="number" min="0" value={expenseForm.unitPrice} onChange={e => setExpenseForm(p => ({...p, unitPrice: Math.max(0, Number(e.target.value))}))}
+                    className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
+                </div>
+              </div>
+              <div className="bg-amber-50 rounded-xl p-3 text-center">
+                <span className="text-xs text-amber-600">小計：</span>
+                <span className="text-lg font-bold text-amber-700">$ {(expenseForm.quantity * expenseForm.unitPrice).toLocaleString()}</span>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">備註（選填）</label>
+                <input type="text" value={expenseForm.note} onChange={e => setExpenseForm(p => ({...p, note: e.target.value}))}
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" placeholder="選填" />
+              </div>
+            </div>
+            <div className="p-6 bg-white border-t border-gray-50 pb-10">
+              <button onClick={handleExpenseSubmit} disabled={isSubmittingExpense || !expenseForm.productName}
+                className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white py-4 rounded-2xl font-bold tracking-wide transition shadow-lg flex justify-center items-center gap-2">
+                {isSubmittingExpense ? '處理中...' : <><Check className="w-5 h-5"/> {editingExpenseId ? '儲存修改' : '確認送出'}</>}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 假單表單 Modal */}
         {isFormOpen && (
