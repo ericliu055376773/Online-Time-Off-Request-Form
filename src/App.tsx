@@ -983,26 +983,22 @@ export default function App() {
             ) : (
               <>
                 <h2 className="text-lg font-bold text-gray-800 mb-6 flex justify-between items-center">管理員後台 <div className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">已登入</div></h2>
-                <div className="space-y-4">
-                  <button onClick={handleOpenSettings} className="w-full bg-gray-50 p-5 rounded-2xl border border-gray-100 flex items-center gap-4 hover:bg-gray-100 transition-all active:scale-[0.98]">
-                    <div className="bg-white p-3 rounded-full shadow-sm"><Settings className="w-6 h-6 text-gray-700" /></div>
-                    <span className="text-[15px] font-bold text-gray-800 tracking-wide">系統設定</span>
+                {/* ★ 兩張主要卡片 */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <button onClick={handleOpenSettings} className="bg-gray-50 p-5 rounded-2xl border border-gray-100 flex flex-col items-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.97]">
+                    <div className="bg-white p-4 rounded-full shadow-sm"><FileText className="w-8 h-8 text-gray-700" /></div>
+                    <span className="text-[15px] font-bold text-gray-800">請假單</span>
                   </button>
-                  {/* ★ 季支出管理入口 */}
-                  <button onClick={() => setIsExpenseBackendMode(true)} className="w-full bg-amber-50 p-5 rounded-2xl border border-amber-100 flex items-center gap-4 hover:bg-amber-100 transition-all active:scale-[0.98]">
-                    <div className="bg-white p-3 rounded-full shadow-sm"><DollarSign className="w-6 h-6 text-amber-600" /></div>
-                    <div className="flex-1 text-left">
-                      <span className="text-[15px] font-bold text-amber-700 tracking-wide block">季支出管理</span>
-                      <span className="text-xs text-amber-500">商品設定 · 各店支出總覽</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-amber-400" />
-                  </button>
-
-                  <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 transition-all active:scale-[0.98]">
-                    <div className="bg-white p-3 rounded-full shadow-sm text-red-500"><LogOut className="w-6 h-6" /></div>
-                    <span className="text-[15px] font-bold text-red-600 tracking-wide">登出管理員帳號</span>
+                  <button onClick={() => setIsExpenseBackendMode(true)} className="bg-amber-50 p-5 rounded-2xl border border-amber-100 flex flex-col items-center gap-3 hover:bg-amber-100 transition-all active:scale-[0.97]">
+                    <div className="bg-white p-4 rounded-full shadow-sm"><DollarSign className="w-8 h-8 text-amber-600" /></div>
+                    <span className="text-[15px] font-bold text-amber-700">季支出</span>
                   </button>
                 </div>
+
+                <button onClick={handleAdminLogout} className="w-full bg-red-50 p-5 rounded-2xl border border-red-100 flex items-center gap-4 hover:bg-red-100 transition-all active:scale-[0.98]">
+                  <div className="bg-white p-3 rounded-full shadow-sm text-red-500"><LogOut className="w-6 h-6" /></div>
+                  <span className="text-[15px] font-bold text-red-600 tracking-wide">登出管理員帳號</span>
+                </button>
               </>
             )}
           </div>
