@@ -910,21 +910,24 @@ export default function App() {
                                       <div className="flex justify-between items-center">
                                         <div>
                                           <span className="text-sm font-bold text-gray-700">{rec.productName}</span>
-                                          <span className="text-xs text-gray-400 ml-2">×{rec.quantity}</span>
+                                          <span className="text-xs text-gray-400 ml-2">×{rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
                                         </div>
                                         <span className="text-xs text-gray-400">{rec.date}</span>
                                       </div>
                                       {/* 後台可編輯金額 */}
-                                      <div className="flex items-center gap-2">
-                                        <label className="text-xs text-gray-500 shrink-0">單價 $</label>
-                                        <input type="number" min="0" defaultValue={rec.unitPrice || 0}
-                                          onBlur={async (e) => {
-                                            const newPrice = Math.max(0, Number(e.target.value));
-                                            const newTotal = newPrice * (rec.quantity || 1);
-                                            try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', rec.id), { unitPrice: newPrice, totalPrice: newTotal }); } catch {}
-                                          }}
-                                          className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
-                                        <span className="text-sm font-bold text-amber-600 shrink-0">= $ {(rec.totalPrice || 0).toLocaleString()}</span>
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <label className="text-xs text-gray-500 shrink-0">單價 $</label>
+                                          <input type="number" min="0" defaultValue={rec.unitPrice || 0}
+                                            onBlur={async (e) => {
+                                              const newPrice = Math.max(0, Number(e.target.value));
+                                              e.target.value = newPrice;
+                                              const newTotal = newPrice * (rec.quantity || 1);
+                                              try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', rec.id), { unitPrice: newPrice, totalPrice: newTotal }); } catch {}
+                                            }}
+                                            className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
+                                        </div>
+                                        <div className="text-right text-sm font-bold text-amber-600">小計：$ {(rec.totalPrice || 0).toLocaleString()}</div>
                                       </div>
                                       {rec.note && <div className="text-xs text-gray-400">{rec.note}</div>}
                                     </div>
@@ -1436,7 +1439,7 @@ export default function App() {
             <header className="flex justify-between items-center px-6 pt-12 pb-4 bg-[#f8f9fa]">
               <button onClick={() => setIsExpenseMode(false)} className="text-sm text-gray-500 font-medium flex items-center gap-1"><ChevronLeft className="w-4 h-4" />返回</button>
               <h1 className="text-lg font-bold text-amber-600 flex items-center gap-1.5"><DollarSign className="w-5 h-5" />季支出</h1>
-              <button onClick={() => openExpenseForm()} className="text-sm text-amber-600 font-bold">+ 新增</button>
+              <button onClick={() => openExpenseForm()} className="bg-amber-500 text-white text-sm font-bold px-4 py-2 rounded-full shadow-md hover:bg-amber-600 active:scale-95 transition">+ 新增</button>
             </header>
             <div className="flex-1 overflow-y-auto px-6 pb-20">
               {(() => {
@@ -1499,6 +1502,7 @@ export default function App() {
                   <input type="text" value={expenseForm.customProduct} onChange={e => setExpenseForm(p => ({...p, customProduct: e.target.value}))}
                     className="w-full bg-gray-50 border-2 border-amber-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none mt-2" placeholder="請輸入商品名稱..." />
                 )}
+                <p className="text-[11px] text-red-500 font-medium mt-1.5 ml-1">＊如有收入，請選擇備註，手動輸入文字</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
