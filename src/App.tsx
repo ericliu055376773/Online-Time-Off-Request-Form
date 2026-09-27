@@ -951,47 +951,52 @@ export default function App() {
                     const byBranch = getExpenseByBranch();
                     const branches = Object.keys(byBranch);
                     if (branches.length === 0) return <div className="text-center text-sm text-amber-400 py-8 bg-amber-50 rounded-xl">尚無支出紀錄</div>;
+                    const storeColors = [
+                      { bg: 'bg-blue-50', border: 'border-blue-200', header: 'bg-blue-100', text: 'text-blue-700', price: 'text-blue-600' },
+                      { bg: 'bg-emerald-50', border: 'border-emerald-200', header: 'bg-emerald-100', text: 'text-emerald-700', price: 'text-emerald-600' },
+                      { bg: 'bg-violet-50', border: 'border-violet-200', header: 'bg-violet-100', text: 'text-violet-700', price: 'text-violet-600' },
+                      { bg: 'bg-rose-50', border: 'border-rose-200', header: 'bg-rose-100', text: 'text-rose-700', price: 'text-rose-600' },
+                      { bg: 'bg-amber-50', border: 'border-amber-200', header: 'bg-amber-100', text: 'text-amber-700', price: 'text-amber-600' },
+                    ];
                     return (
-                      <div className="space-y-2">
-                        {branches.map(b => {
+                      <div className="space-y-4">
+                        {branches.map((b, bi) => {
                           const isOpen = expandedExpenseBranch === b;
                           const data = byBranch[b];
+                          const color = storeColors[bi % storeColors.length];
                           return (
-                            <div key={b} className="bg-white rounded-xl border border-amber-100 overflow-hidden shadow-sm">
-                              <button onClick={() => setExpandedExpenseBranch(isOpen ? null : b)} className="w-full flex justify-between items-center px-4 py-3.5 text-left hover:bg-amber-50 transition">
-                                <span className="text-sm font-bold text-gray-700">{b}</span>
+                            <div key={b} className={`rounded-xl ${color.border} border-2 overflow-hidden shadow-sm`}>
+                              <button onClick={() => setExpandedExpenseBranch(isOpen ? null : b)} className={`w-full flex justify-between items-center px-4 py-3.5 text-left ${color.header} transition`}>
+                                <span className={`text-sm font-bold ${color.text}`}>{b}</span>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm font-bold text-amber-600">$ {data.total.toLocaleString()}</span>
+                                  <span className={`text-sm font-bold ${color.price}`}>$ {data.total.toLocaleString()}</span>
                                   <span className="text-xs text-gray-400">{data.records.length} 筆</span>
                                   <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                                 </div>
                               </button>
                               {isOpen && (
-                                <div className="px-4 pb-3 space-y-2 border-t border-amber-50">
+                                <div className={`px-4 pb-3 space-y-3 pt-3 ${color.bg}`}>
                                   {(() => {
-                                    // 按商品+日期分組
+                                    // ★ 只按商品名稱分組（不分日期）
                                     const grouped = {};
                                     data.records.forEach(rec => {
-                                      const key = `${rec.productName}||${rec.date}`;
-                                      if (!grouped[key]) grouped[key] = { productName: rec.productName, date: rec.date, items: [], totalQty: 0, totalPrice: 0 };
+                                      const key = rec.productName || '未知';
+                                      if (!grouped[key]) grouped[key] = { productName: key, items: [], totalQty: 0, totalPrice: 0 };
                                       grouped[key].items.push(rec);
                                       grouped[key].totalQty += (rec.quantity || 1);
                                       grouped[key].totalPrice += (rec.totalPrice || 0);
                                     });
                                     return Object.values(grouped).map((group, gi) => (
-                                      <div key={gi} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                                      <div key={gi} className="bg-white rounded-xl p-3.5 space-y-2 shadow-sm">
                                         <div className="flex justify-between items-center">
-                                          <div>
-                                            <span className="text-sm font-bold text-gray-700">{group.productName}</span>
-                                            <span className="text-xs text-gray-400 ml-2">共 {group.totalQty}{group.items[0]?.unit ? ` ${group.items[0].unit}` : ''}</span>
-                                          </div>
-                                          <span className="text-xs text-gray-400">{group.date}</span>
+                                          <span className="text-sm font-bold text-gray-800">{group.productName}</span>
+                                          <span className={`text-sm font-bold ${color.price}`}>共 {group.totalQty}{group.items[0]?.unit ? ` ${group.items[0].unit}` : ''}</span>
                                         </div>
                                         {group.items.map(rec => (
-                                          <div key={rec.id} className="bg-white rounded-lg p-2.5 space-y-1.5 border border-gray-100">
-                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                          <div key={rec.id} className="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
+                                            <div className="flex items-center justify-between text-xs text-gray-500">
                                               <span>×{rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
-                                              {rec.note && <span className="text-gray-400 ml-auto">{rec.note}</span>}
+                                              <span>{rec.date}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                               <label className="text-xs text-gray-500 shrink-0">單價 $</label>
@@ -1005,9 +1010,10 @@ export default function App() {
                                                 className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
                                             </div>
                                             <div className="text-right text-xs font-bold text-amber-600">$ {(rec.totalPrice || 0).toLocaleString()}</div>
+                                            {rec.note && <div className="text-xs text-gray-400">{rec.note}</div>}
                                           </div>
                                         ))}
-                                        <div className="text-right text-sm font-bold text-amber-700 pt-1 border-t border-gray-100">小計：$ {group.totalPrice.toLocaleString()}</div>
+                                        <div className={`text-right text-sm font-bold ${color.price} pt-1 border-t border-gray-100`}>小計：$ {group.totalPrice.toLocaleString()}</div>
                                       </div>
                                     ));
                                   })()}
