@@ -128,7 +128,8 @@ export default function App() {
   const [expandedExpenseBranch, setExpandedExpenseBranch] = useState(null);
   const [newExpenseProduct, setNewExpenseProduct] = useState('');
   const [newExpenseUnit, setNewExpenseUnit] = useState('');
-  const [isExpenseProductSettings, setIsExpenseProductSettings] = useState(false); // 商品設定子頁面
+  const [isExpenseProductSettings, setIsExpenseProductSettings] = useState(false);
+  const [isProductRankingMode, setIsProductRankingMode] = useState(false);
 
   // ★ 員工管理
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -811,7 +812,58 @@ export default function App() {
           // 後台
           // ==============================
           <div className="flex-1 overflow-y-auto px-6 py-6 bg-white rounded-t-3xl shadow-inner mt-2">
-            {isExpenseBackendMode ? (
+            {isProductRankingMode ? (
+              /* ★ 商品排行頁面 */
+              <div className="space-y-6 pb-20">
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={() => setIsProductRankingMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
+                  <h2 className="text-lg font-bold text-blue-600">商品排行</h2>
+                  <div className="w-6"></div>
+                </div>
+                {(() => {
+                  // 按門店分組，再按商品統計數量
+                  const byBranch = {};
+                  expenseRecords.forEach(rec => {
+                    const b = rec.branch || '未知';
+                    if (!byBranch[b]) byBranch[b] = {};
+                    const name = rec.productName || '未知';
+                    if (!byBranch[b][name]) byBranch[b][name] = { quantity: 0, unit: rec.unit || '' };
+                    byBranch[b][name].quantity += (rec.quantity || 1);
+                    if (rec.unit) byBranch[b][name].unit = rec.unit;
+                  });
+                  const branches = Object.keys(byBranch);
+                  if (branches.length === 0) return <div className="text-center text-sm text-gray-400 py-12"><BarChart3 className="w-10 h-10 mx-auto mb-3 text-gray-300" /><p>尚無支出紀錄</p></div>;
+                  return branches.map(b => {
+                    const products = Object.entries(byBranch[b]).sort((a, b) => b[1].quantity - a[1].quantity);
+                    const maxQty = products[0]?.[1]?.quantity || 1;
+                    return (
+                      <div key={b} className="space-y-2">
+                        <div className="flex items-center gap-2 px-1">
+                          <span className="text-sm font-bold text-gray-700">{b}</span>
+                          <span className="text-xs text-gray-400">{products.length} 項商品</span>
+                        </div>
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+                          {products.map(([name, info], i) => (
+                            <div key={name}>
+                              <div className="flex justify-between items-center mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-white' : i === 2 ? 'bg-amber-700 text-white' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
+                                  <span className="text-sm font-bold text-gray-800">{name}</span>
+                                </div>
+                                <span className="text-sm font-bold text-blue-600">{info.quantity}{info.unit ? ` ${info.unit}` : ''}</span>
+                              </div>
+                              <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-500 ${i === 0 ? 'bg-amber-400' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-amber-700' : 'bg-blue-400'}`} style={{ width: `${Math.max((info.quantity / maxQty) * 100, 8)}%` }}></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            ) : isExpenseBackendMode ? (
               isExpenseProductSettings ? (
               /* ★ 商品設定子頁面（齒輪進入） */
               <div className="space-y-6 pb-20">
@@ -844,6 +896,17 @@ export default function App() {
                       }} className="bg-amber-500 text-white px-4 rounded-lg hover:bg-amber-600 transition">新增</button>
                     </div>
                   </div>
+                </div>
+
+                {/* ★ 前台提示文字 */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">前台紅字提示</label>
+                  <input type="text" defaultValue={config.expenseHint || '＊如有收入，請選擇備註，手動輸入文字'}
+                    onBlur={async (e) => {
+                      try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseHint: e.target.value }); } catch {}
+                    }}
+                    className="w-full bg-white border border-amber-200 rounded-xl px-4 py-3 text-sm text-red-500 font-medium outline-none" />
+                  <p className="text-[10px] text-gray-400 ml-1">修改後點擊其他地方即自動儲存，留空則不顯示</p>
                 </div>
 
                 {/* ★ 單位名稱管理 */}
@@ -905,33 +968,49 @@ export default function App() {
                               </button>
                               {isOpen && (
                                 <div className="px-4 pb-3 space-y-2 border-t border-amber-50">
-                                  {data.records.map(rec => (
-                                    <div key={rec.id} className="bg-gray-50 rounded-lg p-3 space-y-2">
-                                      <div className="flex justify-between items-center">
-                                        <div>
-                                          <span className="text-sm font-bold text-gray-700">{rec.productName}</span>
-                                          <span className="text-xs text-gray-400 ml-2">×{rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
+                                  {(() => {
+                                    // 按商品+日期分組
+                                    const grouped = {};
+                                    data.records.forEach(rec => {
+                                      const key = `${rec.productName}||${rec.date}`;
+                                      if (!grouped[key]) grouped[key] = { productName: rec.productName, date: rec.date, items: [], totalQty: 0, totalPrice: 0 };
+                                      grouped[key].items.push(rec);
+                                      grouped[key].totalQty += (rec.quantity || 1);
+                                      grouped[key].totalPrice += (rec.totalPrice || 0);
+                                    });
+                                    return Object.values(grouped).map((group, gi) => (
+                                      <div key={gi} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                                        <div className="flex justify-between items-center">
+                                          <div>
+                                            <span className="text-sm font-bold text-gray-700">{group.productName}</span>
+                                            <span className="text-xs text-gray-400 ml-2">共 {group.totalQty}{group.items[0]?.unit ? ` ${group.items[0].unit}` : ''}</span>
+                                          </div>
+                                          <span className="text-xs text-gray-400">{group.date}</span>
                                         </div>
-                                        <span className="text-xs text-gray-400">{rec.date}</span>
+                                        {group.items.map(rec => (
+                                          <div key={rec.id} className="bg-white rounded-lg p-2.5 space-y-1.5 border border-gray-100">
+                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                              <span>×{rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
+                                              {rec.note && <span className="text-gray-400 ml-auto">{rec.note}</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <label className="text-xs text-gray-500 shrink-0">單價 $</label>
+                                              <input type="number" min="0" defaultValue={rec.unitPrice || 0}
+                                                onBlur={async (e) => {
+                                                  const newPrice = Math.max(0, Number(e.target.value));
+                                                  e.target.value = newPrice;
+                                                  const newTotal = newPrice * (rec.quantity || 1);
+                                                  try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', rec.id), { unitPrice: newPrice, totalPrice: newTotal }); } catch {}
+                                                }}
+                                                className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
+                                            </div>
+                                            <div className="text-right text-xs font-bold text-amber-600">$ {(rec.totalPrice || 0).toLocaleString()}</div>
+                                          </div>
+                                        ))}
+                                        <div className="text-right text-sm font-bold text-amber-700 pt-1 border-t border-gray-100">小計：$ {group.totalPrice.toLocaleString()}</div>
                                       </div>
-                                      {/* 後台可編輯金額 */}
-                                      <div className="space-y-1.5">
-                                        <div className="flex items-center gap-2">
-                                          <label className="text-xs text-gray-500 shrink-0">單價 $</label>
-                                          <input type="number" min="0" defaultValue={rec.unitPrice || 0}
-                                            onBlur={async (e) => {
-                                              const newPrice = Math.max(0, Number(e.target.value));
-                                              e.target.value = newPrice;
-                                              const newTotal = newPrice * (rec.quantity || 1);
-                                              try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', rec.id), { unitPrice: newPrice, totalPrice: newTotal }); } catch {}
-                                            }}
-                                            className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
-                                        </div>
-                                        <div className="text-right text-sm font-bold text-amber-600">小計：$ {(rec.totalPrice || 0).toLocaleString()}</div>
-                                      </div>
-                                      {rec.note && <div className="text-xs text-gray-400">{rec.note}</div>}
-                                    </div>
-                                  ))}
+                                    ));
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -1036,15 +1115,19 @@ export default function App() {
             ) : (
               <>
                 <h2 className="text-lg font-bold text-gray-800 mb-6 flex justify-between items-center">管理員後台 <div className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">已登入</div></h2>
-                {/* ★ 兩張主要卡片 */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <button onClick={handleOpenSettings} className="bg-gray-50 p-5 rounded-2xl border border-gray-100 flex flex-col items-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.97]">
-                    <div className="bg-white p-4 rounded-full shadow-sm"><FileText className="w-8 h-8 text-gray-700" /></div>
-                    <span className="text-[15px] font-bold text-gray-800">請假單</span>
+                {/* ★ 三張主要卡片 */}
+                <div className="grid grid-cols-3 gap-2.5 mb-4">
+                  <button onClick={handleOpenSettings} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex flex-col items-center gap-2.5 hover:bg-gray-100 transition-all active:scale-[0.97]">
+                    <div className="bg-white p-3 rounded-full shadow-sm"><FileText className="w-7 h-7 text-gray-700" /></div>
+                    <span className="text-[13px] font-bold text-gray-800">請假單</span>
                   </button>
-                  <button onClick={() => setIsExpenseBackendMode(true)} className="bg-amber-50 p-5 rounded-2xl border border-amber-100 flex flex-col items-center gap-3 hover:bg-amber-100 transition-all active:scale-[0.97]">
-                    <div className="bg-white p-4 rounded-full shadow-sm"><DollarSign className="w-8 h-8 text-amber-600" /></div>
-                    <span className="text-[15px] font-bold text-amber-700">季支出</span>
+                  <button onClick={() => setIsExpenseBackendMode(true)} className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex flex-col items-center gap-2.5 hover:bg-amber-100 transition-all active:scale-[0.97]">
+                    <div className="bg-white p-3 rounded-full shadow-sm"><DollarSign className="w-7 h-7 text-amber-600" /></div>
+                    <span className="text-[13px] font-bold text-amber-700">季支出</span>
+                  </button>
+                  <button onClick={() => setIsProductRankingMode(true)} className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col items-center gap-2.5 hover:bg-blue-100 transition-all active:scale-[0.97]">
+                    <div className="bg-white p-3 rounded-full shadow-sm"><BarChart3 className="w-7 h-7 text-blue-600" /></div>
+                    <span className="text-[13px] font-bold text-blue-700">商品排行</span>
                   </button>
                 </div>
 
@@ -1502,7 +1585,9 @@ export default function App() {
                   <input type="text" value={expenseForm.customProduct} onChange={e => setExpenseForm(p => ({...p, customProduct: e.target.value}))}
                     className="w-full bg-gray-50 border-2 border-amber-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 outline-none mt-2" placeholder="請輸入商品名稱..." />
                 )}
-                <p className="text-[11px] text-red-500 font-medium mt-1.5 ml-1">＊如有收入，請選擇備註，手動輸入文字</p>
+                {(config.expenseHint !== '' && (config.expenseHint || '＊如有收入，請選擇備註，手動輸入文字')) && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1.5 ml-1">{config.expenseHint !== undefined ? config.expenseHint : '＊如有收入，請選擇備註，手動輸入文字'}</p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
