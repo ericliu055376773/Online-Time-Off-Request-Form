@@ -4301,6 +4301,23 @@ export default function App() {
                                             const timedAttemptCount = catAttempts[activeCategoryId]?.timed || 1;
                                             const timedRetestRequested = catAttempts[activeCategoryId]?.timedRetestRequested;
                                             const retakeHistory = catAttempts[activeCategoryId]?.timedRetakeHistory || [];
+                                            const historyUI = retakeHistory.length > 0 ? (
+                                              <div className="w-full mt-3 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                                                <button onClick={(e) => { const el = e.currentTarget.nextSibling; if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none'; }} className="w-full flex items-center justify-between p-3 text-xs font-bold text-gray-500 hover:bg-gray-100">
+                                                  <span>📋 考試紀錄（{retakeHistory.length} 次重考）</span>
+                                                  <ChevronRight c="w-3 h-3 text-gray-400 rotate-90" />
+                                                </button>
+                                                <div style={{ display: 'none' }} className="px-3 pb-3 space-y-1.5">
+                                                  {retakeHistory.map((h, hi) => (
+                                                    <div key={hi} className="flex items-center justify-between bg-white p-2 rounded-lg text-[10px]">
+                                                      <span className="font-bold text-gray-600">第 {h.attempt} 次</span>
+                                                      <span className="text-gray-400">{new Date(h.time).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                      <span className="text-gray-400">{h.approver}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            ) : null;
                                             if (appConfig.retakeRequiresApproval !== false) {
                                               if (timedRetestRequested) {
                                                 return (
@@ -4310,25 +4327,30 @@ export default function App() {
                                                 );
                                               }
                                               return (
-                                                <button
-                                                  onClick={async () => {
-                                                    const ca = currentUserData?.categoryAttempts || {};
-                                                    const cd = ca[activeCategoryId] || {};
-                                                    cd.timedRetestRequested = true;
-                                                    ca[activeCategoryId] = cd;
-                                                    await updateDoc(doc(db, 'employees', currentUserData.id), { categoryAttempts: ca });
-                                                    showToast('已申請電腦測驗重考，請等待主管核准！');
-                                                  }}
-                                                  className="w-full mt-4 py-4 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-red-600 active:scale-95"
-                                                >
-                                                  🔄 申請重新測驗（已考 {timedAttemptCount} 次）
-                                                </button>
+                                                <div className="mt-4">
+                                                  {historyUI}
+                                                  <button
+                                                    onClick={async () => {
+                                                      const ca = currentUserData?.categoryAttempts || {};
+                                                      const cd = ca[activeCategoryId] || {};
+                                                      cd.timedRetestRequested = true;
+                                                      ca[activeCategoryId] = cd;
+                                                      await updateDoc(doc(db, 'employees', currentUserData.id), { categoryAttempts: ca });
+                                                      showToast('已申請電腦測驗重考，請等待主管核准！');
+                                                    }}
+                                                    className="w-full mt-3 py-4 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-red-600 active:scale-95"
+                                                  >
+                                                    🔄 申請重新測驗（已考 {timedAttemptCount} 次）
+                                                  </button>
+                                                </div>
                                               );
                                             } else {
                                               return (
-                                                <button
-                                                  onClick={async () => {
-                                                    const freshSnap = await getDoc(doc(db, 'employees', currentUserData.id));
+                                                <div className="mt-4">
+                                                  {historyUI}
+                                                  <button
+                                                    onClick={async () => {
+                                                      const freshSnap = await getDoc(doc(db, 'employees', currentUserData.id));
                                                     const freshData = freshSnap.exists() ? freshSnap.data() : {};
                                                     const newRecords = { ...(freshData.examRecords || {}) };
                                                     for (const exam of timedExams) { delete newRecords[exam.id]; }
@@ -4345,8 +4367,9 @@ export default function App() {
                                                   }}
                                                   className="w-full mt-4 py-4 bg-[#3B82F6] text-white rounded-xl font-bold text-sm shadow-lg hover:bg-[#2563EB] active:scale-95"
                                                 >
-                                                  🔄 重新測驗（已考 {timedAttemptCount} 次）
-                                                </button>
+                                                    🔄 重新測驗（已考 {timedAttemptCount} 次）
+                                                  </button>
+                                                </div>
                                               );
                                             }
                                           }
@@ -4906,29 +4929,51 @@ export default function App() {
 
                                         // 有失敗 - 顯示重考申請（優先於交卷按鈕）
                                         if (anyFailed) {
+                                          const proctorHistory = cd.proctorRetakeHistory || [];
+                                          const proctorHistUI = proctorHistory.length > 0 ? (
+                                            <div className="w-full mt-3 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                                              <button onClick={(e) => { const el = e.currentTarget.nextSibling; if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none'; }} className="w-full flex items-center justify-between p-3 text-xs font-bold text-gray-500 hover:bg-gray-100">
+                                                <span>📋 考試紀錄（{proctorHistory.length} 次重考）</span>
+                                                <ChevronRight c="w-3 h-3 text-gray-400 rotate-90" />
+                                              </button>
+                                              <div style={{ display: 'none' }} className="px-3 pb-3 space-y-1.5">
+                                                {proctorHistory.map((h, hi) => (
+                                                  <div key={hi} className="flex items-center justify-between bg-white p-2 rounded-lg text-[10px]">
+                                                    <span className="font-bold text-gray-600">第 {h.attempt} 次</span>
+                                                    <span className="text-gray-400">{new Date(h.time).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                    <span className="text-gray-400">{h.approver}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          ) : null;
                                           if (appConfig.retakeRequiresApproval !== false) {
                                             if (proctorRetestRequested) {
                                               return <div className="w-full mt-4 py-4 bg-orange-100 text-orange-600 rounded-xl font-bold text-sm text-center">⏳ 已申請考官測驗重考（第 {proctorAttempts + 1} 次），等待主管核准...</div>;
                                             }
                                             return (
-                                              <button onClick={async () => { const ca2 = currentUserData?.categoryAttempts || {}; const cd2 = ca2[activeCategoryId] || {}; cd2.proctorRetestRequested = true; ca2[activeCategoryId] = cd2; await updateDoc(doc(db, 'employees', currentUserData.id), { categoryAttempts: ca2 }); showToast('已申請考官測驗重考，請等待主管核准！'); }} className="w-full mt-4 py-4 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-red-600 active:scale-95">
-                                                🔄 申請考官測驗重考（已考 {proctorAttempts} 次）
-                                              </button>
+                                              <div className="mt-4">{proctorHistUI}
+                                                <button onClick={async () => { const ca2 = currentUserData?.categoryAttempts || {}; const cd2 = ca2[activeCategoryId] || {}; cd2.proctorRetestRequested = true; ca2[activeCategoryId] = cd2; await updateDoc(doc(db, 'employees', currentUserData.id), { categoryAttempts: ca2 }); showToast('已申請考官測驗重考，請等待主管核准！'); }} className="w-full mt-3 py-4 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-red-600 active:scale-95">
+                                                  🔄 申請考官測驗重考（已考 {proctorAttempts} 次）
+                                                </button>
+                                              </div>
                                             );
                                           } else {
                                             return (
-                                              <button onClick={async () => {
-                                                const fs = await getDoc(doc(db, 'employees', currentUserData.id)); const fd = fs.exists() ? fs.data() : {};
-                                                const nr = { ...(fd.examRecords || {}) }; const proctorComputerTypes2 = ['essay']; exams.filter(e => e.categoryId === activeCategoryId && proctorComputerTypes2.includes(e.type)).forEach(e => { delete nr[e.id]; });
-                                                const ca2 = { ...(fd.categoryAttempts || {}) }; const cd2 = ca2[activeCategoryId] || {}; cd2.proctor = (cd2.proctor || 0) + 1;
-                                                const hist = cd2.proctorRetakeHistory || []; hist.push({ time: new Date().toISOString(), attempt: cd2.proctor, approver: selectedProctor || '自行重考' }); cd2.proctorRetakeHistory = hist;
-                                                ca2[activeCategoryId] = cd2;
-                                                await updateDoc(doc(db, 'employees', currentUserData.id), { examRecords: nr, categoryAttempts: ca2 });
-                                                setShowProctorSection(false); setProctorSectionStarted(false); setProctorSectionVerified(false); setCurrentAnswers({});
-                                                showToast('🔄 已重置，請重新開始考官測驗');
-                                              }} className="w-full mt-4 py-4 bg-[#D85E38] text-white rounded-xl font-bold text-sm shadow-lg hover:bg-[#C25330] active:scale-95">
-                                                🔄 重新測驗（已考 {proctorAttempts} 次）
-                                              </button>
+                                              <div className="mt-4">{proctorHistUI}
+                                                <button onClick={async () => {
+                                                  const fs = await getDoc(doc(db, 'employees', currentUserData.id)); const fd = fs.exists() ? fs.data() : {};
+                                                  const nr = { ...(fd.examRecords || {}) }; const proctorComputerTypes2 = ['essay']; exams.filter(e => e.categoryId === activeCategoryId && proctorComputerTypes2.includes(e.type)).forEach(e => { delete nr[e.id]; });
+                                                  const ca2 = { ...(fd.categoryAttempts || {}) }; const cd2 = ca2[activeCategoryId] || {}; cd2.proctor = (cd2.proctor || 0) + 1;
+                                                  const hist = cd2.proctorRetakeHistory || []; hist.push({ time: new Date().toISOString(), attempt: cd2.proctor, approver: selectedProctor || '自行重考' }); cd2.proctorRetakeHistory = hist;
+                                                  ca2[activeCategoryId] = cd2;
+                                                  await updateDoc(doc(db, 'employees', currentUserData.id), { examRecords: nr, categoryAttempts: ca2 });
+                                                  setShowProctorSection(false); setProctorSectionStarted(false); setProctorSectionVerified(false); setCurrentAnswers({});
+                                                  showToast('🔄 已重置，請重新開始考官測驗');
+                                                }} className="w-full mt-3 py-4 bg-[#D85E38] text-white rounded-xl font-bold text-sm shadow-lg hover:bg-[#C25330] active:scale-95">
+                                                  🔄 重新測驗（已考 {proctorAttempts} 次）
+                                                </button>
+                                              </div>
                                             );
                                           }
                                         }
@@ -5210,6 +5255,24 @@ export default function App() {
                                         const catAttempts = currentUserData?.categoryAttempts || {};
                                         const practicalAttemptCount = catAttempts[activeCategoryId]?.practical || 1;
                                         const practicalRetestRequested = catAttempts[activeCategoryId]?.practicalRetestRequested;
+                                        const practHistory = catAttempts[activeCategoryId]?.practicalRetakeHistory || [];
+                                        const practHistUI = practHistory.length > 0 ? (
+                                          <div className="w-full mt-3 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                                            <button onClick={(e) => { const el = e.currentTarget.nextSibling; if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none'; }} className="w-full flex items-center justify-between p-3 text-xs font-bold text-gray-500 hover:bg-gray-100">
+                                              <span>📋 考試紀錄（{practHistory.length} 次重考）</span>
+                                              <ChevronRight c="w-3 h-3 text-gray-400 rotate-90" />
+                                            </button>
+                                            <div style={{ display: 'none' }} className="px-3 pb-3 space-y-1.5">
+                                              {practHistory.map((h, hi) => (
+                                                <div key={hi} className="flex items-center justify-between bg-white p-2 rounded-lg text-[10px]">
+                                                  <span className="font-bold text-gray-600">第 {h.attempt} 次</span>
+                                                  <span className="text-gray-400">{new Date(h.time).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                  <span className="text-gray-400">{h.approver}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : null;
                                         if (appConfig.retakeRequiresApproval !== false) {
                                           if (practicalRetestRequested) {
                                             return (
@@ -5219,24 +5282,28 @@ export default function App() {
                                             );
                                           }
                                           return (
-                                            <button onClick={async () => { const ca = currentUserData?.categoryAttempts || {}; const cd = ca[activeCategoryId] || {}; cd.practicalRetestRequested = true; cd.practical = (cd.practical || 0) + 1; ca[activeCategoryId] = cd; await updateDoc(doc(db, 'employees', currentUserData.id), { categoryAttempts: ca }); showToast('已申請考官實作測驗重考，請等待主管核准！'); }} className="w-full mt-4 py-4 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-red-600 active:scale-95">
-                                              🔄 申請重新測驗（已考 {practicalAttemptCount} 次）
-                                            </button>
+                                            <div className="mt-4">{practHistUI}
+                                              <button onClick={async () => { const ca = currentUserData?.categoryAttempts || {}; const cd = ca[activeCategoryId] || {}; cd.practicalRetestRequested = true; cd.practical = (cd.practical || 0) + 1; ca[activeCategoryId] = cd; await updateDoc(doc(db, 'employees', currentUserData.id), { categoryAttempts: ca }); showToast('已申請考官實作測驗重考，請等待主管核准！'); }} className="w-full mt-3 py-4 bg-red-500 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-red-600 active:scale-95">
+                                                🔄 申請重新測驗（已考 {practicalAttemptCount} 次）
+                                              </button>
+                                            </div>
                                           );
                                         } else {
                                           return (
-                                            <button onClick={async () => {
-                                              const fs = await getDoc(doc(db, 'employees', currentUserData.id)); const fd = fs.exists() ? fs.data() : {};
-                                              const nr = { ...(fd.examRecords || {}) }; const practTypes = ['oral','practical','timed_task']; exams.filter(e => e.categoryId === activeCategoryId && practTypes.includes(e.type)).forEach(e => { delete nr[e.id]; });
-                                              const ca = { ...(fd.categoryAttempts || {}) }; const cd = ca[activeCategoryId] || {}; cd.practical = (cd.practical || 0) + 1;
-                                              const hist = cd.practicalRetakeHistory || []; hist.push({ time: new Date().toISOString(), attempt: cd.practical, approver: selectedProctor || '自行重考' }); cd.practicalRetakeHistory = hist;
-                                              ca[activeCategoryId] = cd;
-                                              await updateDoc(doc(db, 'employees', currentUserData.id), { examRecords: nr, categoryAttempts: ca });
-                                              setShowTimedSection(false); setSelectedProctor(''); setCurrentAnswers({});
-                                              showToast('🔄 已重置，請重新開始實作測驗');
-                                            }} className="w-full mt-4 py-4 bg-[#7C3AED] text-white rounded-xl font-bold text-sm shadow-lg hover:bg-[#6D28D9] active:scale-95">
-                                              🔄 重新測驗（已考 {practicalAttemptCount} 次）
-                                            </button>
+                                            <div className="mt-4">{practHistUI}
+                                              <button onClick={async () => {
+                                                const fs = await getDoc(doc(db, 'employees', currentUserData.id)); const fd = fs.exists() ? fs.data() : {};
+                                                const nr = { ...(fd.examRecords || {}) }; const practTypes = ['oral','practical','timed_task']; exams.filter(e => e.categoryId === activeCategoryId && practTypes.includes(e.type)).forEach(e => { delete nr[e.id]; });
+                                                const ca = { ...(fd.categoryAttempts || {}) }; const cd = ca[activeCategoryId] || {}; cd.practical = (cd.practical || 0) + 1;
+                                                const hist = cd.practicalRetakeHistory || []; hist.push({ time: new Date().toISOString(), attempt: cd.practical, approver: selectedProctor || '自行重考' }); cd.practicalRetakeHistory = hist;
+                                                ca[activeCategoryId] = cd;
+                                                await updateDoc(doc(db, 'employees', currentUserData.id), { examRecords: nr, categoryAttempts: ca });
+                                                setShowTimedSection(false); setSelectedProctor(''); setCurrentAnswers({});
+                                                showToast('🔄 已重置，請重新開始實作測驗');
+                                              }} className="w-full mt-3 py-4 bg-[#7C3AED] text-white rounded-xl font-bold text-sm shadow-lg hover:bg-[#6D28D9] active:scale-95">
+                                                🔄 重新測驗（已考 {practicalAttemptCount} 次）
+                                              </button>
+                                            </div>
                                           );
                                         }
                                       })()}
