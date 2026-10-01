@@ -6,7 +6,7 @@ import {
   ChevronLeft, List, Clock as ClockIcon, 
   Plus, X, Check, Calendar, Trash2,
   Settings, Save, Edit2, LogOut, Camera, Lock, Eye, EyeOff, ChevronDown,
-  FileText, Users, BarChart3, DollarSign, ChevronRight, ShoppingBag
+  FileText, Users, BarChart3, DollarSign, ChevronRight, ShoppingBag, Download, Search
 } from 'lucide-react';
 
 // ==========================================
@@ -130,6 +130,10 @@ export default function App() {
   const [newExpenseUnit, setNewExpenseUnit] = useState('');
   const [isExpenseProductSettings, setIsExpenseProductSettings] = useState(false);
   const [isProductRankingMode, setIsProductRankingMode] = useState(false);
+  const [expenseSubPage, setExpenseSubPage] = useState(''); // '' | 'current' | 'search'
+  const [expenseSearchYear, setExpenseSearchYear] = useState(new Date().getFullYear());
+  const [expenseSearchMonth, setExpenseSearchMonth] = useState(new Date().getMonth() + 1);
+  const [expandedExpenseDate, setExpandedExpenseDate] = useState(null); // 前台折疊日期
 
   // ★ 員工管理
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
@@ -493,10 +497,12 @@ export default function App() {
     const finalProduct = expenseForm.productName === '其他' ? expenseForm.customProduct.trim() : expenseForm.productName;
     if (!finalProduct || !user) return;
     setIsSubmittingExpense(true);
-    const totalPrice = expenseForm.quantity * expenseForm.unitPrice;
+    const defaultPrice = (config.expenseProductPrices || {})[finalProduct] || 0;
+    const usePrice = expenseForm.unitPrice || defaultPrice;
+    const totalPrice = expenseForm.quantity * usePrice;
     const now = new Date(); const p = (n) => String(n).padStart(2,'0');
     const dateStr = `${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())}`;
-    const saveData = { productName: finalProduct, unit: expenseForm.unit, quantity: expenseForm.quantity, unitPrice: expenseForm.unitPrice, note: expenseForm.note, totalPrice, branch: loggedInBranch, date: dateStr };
+    const saveData = { productName: finalProduct, unit: expenseForm.unit, quantity: expenseForm.quantity, unitPrice: usePrice, note: expenseForm.note, totalPrice, branch: loggedInBranch, date: dateStr };
     try {
       if (editingExpenseId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', editingExpenseId), { ...saveData, updatedAt: serverTimestamp() });
       else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'expense_records'), { ...saveData, createdAt: serverTimestamp() });
@@ -877,16 +883,31 @@ export default function App() {
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">商品名稱管理</label>
                   <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 space-y-2">
-                    {(config.expenseProducts || []).map((p, i) => (
-                      <div key={i} className="flex justify-between items-center bg-white px-3 py-2.5 rounded-lg border border-amber-100 shadow-sm">
-                        <span className="text-sm font-medium text-gray-700">{p}</span>
-                        <button onClick={async () => {
-                          if (!window.confirm(`確定要刪除「${p}」嗎？刪除後無法復原。`)) return;
-                          const updated = [...(config.expenseProducts || [])]; updated.splice(i, 1);
-                          try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProducts: updated }); } catch {}
-                        }} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                    {(config.expenseProducts || []).map((p, i) => {
+                      const prices = config.expenseProductPrices || {};
+                      return (
+                      <div key={i} className="bg-white px-3 py-2.5 rounded-lg border border-amber-100 shadow-sm space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-gray-700">{p}</span>
+                          <button onClick={async () => {
+                            if (!window.confirm(`確定要刪除「${p}」嗎？刪除後無法復原。`)) return;
+                            const updated = [...(config.expenseProducts || [])]; updated.splice(i, 1);
+                            try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProducts: updated }); } catch {}
+                          }} className="text-gray-300 hover:text-red-500 transition"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-gray-400 shrink-0">預設單價 $</label>
+                          <input type="number" min="0" defaultValue={prices[p] || 0}
+                            onBlur={async (e) => {
+                              const v = Math.max(0, Number(e.target.value)); e.target.value = v;
+                              const newPrices = { ...prices, [p]: v };
+                              try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProductPrices: newPrices }); } catch {}
+                            }}
+                            className="flex-1 min-w-0 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none" />
+                        </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     <div className="flex gap-2 pt-2">
                       <input type="text" value={newExpenseProduct} onChange={e => setNewExpenseProduct(e.target.value)} placeholder="輸入新商品名稱..." className="flex-1 bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-sm outline-none" />
                       <button onClick={async () => {
@@ -934,100 +955,101 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              ) : (
-              /* ★ 季支出後台主頁 */
+              ) : expenseSubPage === '' ? (
+              /* ★ 季支出後台 — 選擇頁 */
               <div className="space-y-6 pb-20">
                 <div className="flex items-center justify-between mb-2">
                   <button onClick={() => setIsExpenseBackendMode(false)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
                   <h2 className="text-lg font-bold text-amber-600">季支出管理</h2>
                   <button onClick={() => setIsExpenseProductSettings(true)} className="p-2 -mr-2 text-amber-500 hover:bg-amber-50 rounded-full transition"><Settings className="w-5 h-5" /></button>
                 </div>
-
-                {/* 各店支出總覽（風琴式 + 可編輯金額） */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-amber-600 uppercase tracking-wider">各店支出總覽</label>
-                  <div className="text-right text-sm font-bold text-amber-700 mb-1">全部合計：$ {expenseRecords.reduce((s,r) => s + (r.totalPrice||0), 0).toLocaleString()}</div>
-                  {(() => {
-                    const byBranch = getExpenseByBranch();
-                    const branches = Object.keys(byBranch);
-                    if (branches.length === 0) return <div className="text-center text-sm text-amber-400 py-8 bg-amber-50 rounded-xl">尚無支出紀錄</div>;
-                    const storeColors = [
-                      { bg: 'bg-blue-50', border: 'border-blue-200', header: 'bg-blue-100', text: 'text-blue-700', price: 'text-blue-600' },
-                      { bg: 'bg-emerald-50', border: 'border-emerald-200', header: 'bg-emerald-100', text: 'text-emerald-700', price: 'text-emerald-600' },
-                      { bg: 'bg-violet-50', border: 'border-violet-200', header: 'bg-violet-100', text: 'text-violet-700', price: 'text-violet-600' },
-                      { bg: 'bg-rose-50', border: 'border-rose-200', header: 'bg-rose-100', text: 'text-rose-700', price: 'text-rose-600' },
-                      { bg: 'bg-amber-50', border: 'border-amber-200', header: 'bg-amber-100', text: 'text-amber-700', price: 'text-amber-600' },
-                    ];
-                    return (
-                      <div className="space-y-4">
-                        {branches.map((b, bi) => {
-                          const isOpen = expandedExpenseBranch === b;
-                          const data = byBranch[b];
-                          const color = storeColors[bi % storeColors.length];
-                          return (
-                            <div key={b} className={`rounded-xl ${color.border} border-2 overflow-hidden shadow-sm`}>
-                              <button onClick={() => setExpandedExpenseBranch(isOpen ? null : b)} className={`w-full flex justify-between items-center px-4 py-3.5 text-left ${color.header} transition`}>
-                                <span className={`text-sm font-bold ${color.text}`}>{b}</span>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-sm font-bold ${color.price}`}>$ {data.total.toLocaleString()}</span>
-                                  <span className="text-xs text-gray-400">{data.records.length} 筆</span>
-                                  <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                                </div>
-                              </button>
-                              {isOpen && (
-                                <div className={`px-4 pb-3 space-y-3 pt-3 ${color.bg}`}>
-                                  {(() => {
-                                    // ★ 只按商品名稱分組（不分日期）
-                                    const grouped = {};
-                                    data.records.forEach(rec => {
-                                      const key = rec.productName || '未知';
-                                      if (!grouped[key]) grouped[key] = { productName: key, items: [], totalQty: 0, totalPrice: 0 };
-                                      grouped[key].items.push(rec);
-                                      grouped[key].totalQty += (rec.quantity || 1);
-                                      grouped[key].totalPrice += (rec.totalPrice || 0);
-                                    });
-                                    return Object.values(grouped).map((group, gi) => (
-                                      <div key={gi} className="bg-white rounded-xl p-3.5 space-y-2 shadow-sm">
-                                        <div className="flex justify-between items-center">
-                                          <span className="text-sm font-bold text-gray-800">{group.productName}</span>
-                                          <span className={`text-sm font-bold ${color.price}`}>共 {group.totalQty}{group.items[0]?.unit ? ` ${group.items[0].unit}` : ''}</span>
-                                        </div>
-                                        {group.items.map(rec => (
-                                          <div key={rec.id} className="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
-                                            <div className="flex items-center justify-between text-xs text-gray-500">
-                                              <span>×{rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
-                                              <span>{rec.date}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                              <label className="text-xs text-gray-500 shrink-0">單價 $</label>
-                                              <input type="number" min="0" defaultValue={rec.unitPrice || 0}
-                                                onBlur={async (e) => {
-                                                  const newPrice = Math.max(0, Number(e.target.value));
-                                                  e.target.value = newPrice;
-                                                  const newTotal = newPrice * (rec.quantity || 1);
-                                                  try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expense_records', rec.id), { unitPrice: newPrice, totalPrice: newTotal }); } catch {}
-                                                }}
-                                                className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none" />
-                                            </div>
-                                            <div className="text-right text-xs font-bold text-amber-600">$ {(rec.totalPrice || 0).toLocaleString()}</div>
-                                            {rec.note && <div className="text-xs text-gray-400">{rec.note}</div>}
-                                          </div>
-                                        ))}
-                                        <div className={`text-right text-sm font-bold ${color.price} pt-1 border-t border-gray-100`}>小計：$ {group.totalPrice.toLocaleString()}</div>
-                                      </div>
-                                    ));
-                                  })()}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
+                <div className="space-y-3">
+                  <button onClick={() => { setExpenseSubPage('current'); setExpandedExpenseBranch(null); }}
+                    className="w-full bg-amber-50 p-5 rounded-2xl border border-amber-100 flex items-center gap-4 hover:bg-amber-100 transition-all active:scale-[0.98]">
+                    <div className="bg-white p-3 rounded-full shadow-sm"><Calendar className="w-6 h-6 text-amber-600" /></div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] font-bold text-amber-700 block">當月支出</span>
+                      <span className="text-xs text-amber-500">{new Date().getFullYear()}年{new Date().getMonth()+1}月</span>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-amber-400" />
+                  </button>
+                  <button onClick={() => { setExpenseSubPage('search'); setExpandedExpenseBranch(null); }}
+                    className="w-full bg-blue-50 p-5 rounded-2xl border border-blue-100 flex items-center gap-4 hover:bg-blue-100 transition-all active:scale-[0.98]">
+                    <div className="bg-white p-3 rounded-full shadow-sm"><Search className="w-6 h-6 text-blue-600" /></div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] font-bold text-blue-700 block">查詢其他月份支出</span>
+                      <span className="text-xs text-blue-500">自選年月查詢</span>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-blue-400" />
+                  </button>
                 </div>
               </div>
-              )
+              ) : (
+              <div className="space-y-4 pb-20">
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={() => { setExpenseSubPage(''); setExpandedExpenseBranch(null); }} className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full transition"><ChevronLeft className="w-6 h-6" /></button>
+                  <h2 className="text-lg font-bold text-amber-600">{expenseSubPage === 'current' ? '當月支出' : '查詢支出'}</h2>
+                  <button onClick={() => setIsExpenseProductSettings(true)} className="p-2 -mr-2 text-amber-500 hover:bg-amber-50 rounded-full transition"><Settings className="w-5 h-5" /></button>
+                </div>
+                {expenseSubPage === 'search' && (
+                  <div className="flex items-center gap-2">
+                    <select value={expenseSearchYear} onChange={e => setExpenseSearchYear(Number(e.target.value))} className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
+                      {[2024,2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}年</option>)}
+                    </select>
+                    <select value={expenseSearchMonth} onChange={e => setExpenseSearchMonth(Number(e.target.value))} className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-800 outline-none">
+                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月</option>)}
+                    </select>
+                  </div>
+                )}
+                {(() => {
+                  const tY = expenseSubPage === 'current' ? new Date().getFullYear() : expenseSearchYear;
+                  const tM = expenseSubPage === 'current' ? new Date().getMonth() + 1 : expenseSearchMonth;
+                  const mRecs = expenseRecords.filter(r => { const d = new Date(r.date); return d.getFullYear() === tY && d.getMonth() === tM - 1; });
+                  const gTotal = mRecs.reduce((s,r) => s + (r.totalPrice||0), 0);
+                  const byB = {}; mRecs.forEach(r => { const b = r.branch||'未知'; if(!byB[b]) byB[b]={records:[],total:0}; byB[b].records.push(r); byB[b].total+=(r.totalPrice||0); });
+                  const bKeys = Object.keys(byB);
+                  const sc = [{bg:'bg-blue-50',bd:'border-blue-200',hd:'bg-blue-100',tx:'text-blue-700',pr:'text-blue-600'},{bg:'bg-emerald-50',bd:'border-emerald-200',hd:'bg-emerald-100',tx:'text-emerald-700',pr:'text-emerald-600'},{bg:'bg-violet-50',bd:'border-violet-200',hd:'bg-violet-100',tx:'text-violet-700',pr:'text-violet-600'},{bg:'bg-rose-50',bd:'border-rose-200',hd:'bg-rose-100',tx:'text-rose-700',pr:'text-rose-600'},{bg:'bg-amber-50',bd:'border-amber-200',hd:'bg-amber-100',tx:'text-amber-700',pr:'text-amber-600'}];
+                  return (<>
+                    <div className="bg-amber-50 rounded-xl p-4 border border-amber-100 flex justify-between items-center">
+                      <div><div className="text-xs text-amber-600">{tY}年{tM}月</div><div className="text-xl font-bold text-amber-700">合計：$ {gTotal.toLocaleString()}</div></div>
+                      <span className="text-xs text-gray-400">{mRecs.length} 筆</span>
+                    </div>
+                    {bKeys.length === 0 ? <div className="text-center text-sm text-amber-400 py-8">該月份尚無支出紀錄</div> : bKeys.map((b,bi) => {
+                      const co = sc[bi%sc.length]; const dt = byB[b]; const isOp = expandedExpenseBranch===b;
+                      const grp = {}; dt.records.forEach(r => { const k=r.productName||'?'; if(!grp[k]) grp[k]={name:k,items:[],qty:0,price:0}; grp[k].items.push(r); grp[k].qty+=(r.quantity||1); grp[k].price+=(r.totalPrice||0); });
+                      return (
+                        <div key={b} className={`rounded-xl ${co.bd} border-2 overflow-hidden shadow-sm`}>
+                          <button onClick={() => setExpandedExpenseBranch(isOp?null:b)} className={`w-full flex justify-between items-center px-4 py-3.5 text-left ${co.hd} transition`}>
+                            <span className={`text-sm font-bold ${co.tx}`}>{b}</span>
+                            <div className="flex items-center gap-2"><span className={`text-sm font-bold ${co.pr}`}>$ {dt.total.toLocaleString()}</span><span className="text-xs text-gray-400">{dt.records.length} 筆</span><ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOp?'rotate-90':''}`} /></div>
+                          </button>
+                          {isOp && <div className={`px-4 pb-3 space-y-3 pt-3 ${co.bg}`}>
+                            {Object.values(grp).map((g,gi) => (
+                              <div key={gi} className="bg-white rounded-xl p-3.5 space-y-2 shadow-sm">
+                                <div className="flex justify-between items-center"><span className="text-sm font-bold text-gray-800">{g.name}</span><span className={`text-sm font-bold ${co.pr}`}>共 {g.qty}{g.items[0]?.unit?` ${g.items[0].unit}`:''}</span></div>
+                                {g.items.map(r => (
+                                  <div key={r.id} className="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs text-gray-500"><span>x{r.quantity}{r.unit?` ${r.unit}`:''}</span><span>{r.date}</span></div>
+                                    <div className="flex items-center gap-2"><label className="text-xs text-gray-500 shrink-0">單價 $</label><input type="number" min="0" defaultValue={r.unitPrice||0} onBlur={async(e)=>{const p=Math.max(0,Number(e.target.value));e.target.value=p;const t=p*(r.quantity||1);try{await updateDoc(doc(db,'artifacts',appId,'public','data','expense_records',r.id),{unitPrice:p,totalPrice:t})}catch{}}} className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none"/></div>
+                                    <div className="text-right text-xs font-bold text-amber-600">$ {(r.totalPrice||0).toLocaleString()}</div>
+                                    {r.note && <div className="text-xs text-gray-400">{r.note}</div>}
+                                  </div>))}
+                                <div className={`text-right text-sm font-bold ${co.pr} pt-1 border-t border-gray-100`}>小計：$ {g.price.toLocaleString()}</div>
+                              </div>))}
+                          </div>}
+                        </div>);
+                    })}
+                    {expenseSubPage === 'search' && mRecs.length > 0 && (
+                      <div className="flex gap-2 pt-2"><button onClick={() => {
+                        const rows = mRecs.map(r => `${r.branch},${r.productName},${r.quantity},${r.unit||''},${r.unitPrice||0},${r.totalPrice||0},${r.date},${r.note||''}`);
+                        const csv = '\uFEFF門店,商品,數量,單位,單價,小計,日期,備註\n'+rows.join('\n');
+                        const bl = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+                        const a = document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=`支出報表_${tY}年${tM}月.csv`; a.click();
+                      }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition"><Download className="w-4 h-4"/>匯出 CSV</button></div>
+                    )}
+                  </>);
+                })()}
+              </div>)
             ) : isSettingsMode ? (
               <div className="space-y-6 pb-20">
                 <div className="flex items-center justify-between mb-2">
@@ -1543,23 +1565,53 @@ export default function App() {
                     {myExpenses.length === 0 ? (
                       <div className="text-center py-12 text-gray-400 text-sm"><ShoppingBag className="w-10 h-10 mx-auto mb-3 text-gray-300" /><p>尚無支出紀錄</p></div>
                     ) : (
-                      <div className="space-y-2">
-                        {myExpenses.map(rec => (
-                          <div key={rec.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                            <div className="flex justify-between items-start">
-                              <div><div className="text-sm font-bold text-gray-800">{rec.productName}</div><div className="text-xs text-gray-400 mt-0.5">{rec.date}</div></div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => openExpenseForm(rec)} className="text-gray-300 hover:text-blue-500"><Edit2 className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => handleDeleteExpense(rec.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                              <span>數量 {rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
-                              {rec.note && <span className="text-gray-400 ml-auto">{rec.note}</span>}
-                            </div>
+                      (() => {
+                        // 按日期分組
+                        const byDate = {};
+                        myExpenses.forEach(rec => {
+                          const d = rec.date || '未知';
+                          if (!byDate[d]) byDate[d] = [];
+                          byDate[d].push(rec);
+                        });
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(byDate).map(([date, recs]) => {
+                              const isOpen = expandedExpenseDate === date;
+                              return (
+                                <div key={date} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                                  <button onClick={() => setExpandedExpenseDate(isOpen ? null : date)} className="w-full flex justify-between items-center px-4 py-3 text-left hover:bg-gray-50 transition">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                                      <span className="text-sm font-bold text-gray-700">{date}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-gray-400">{recs.length} 項</span>
+                                      <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+                                  </button>
+                                  {isOpen && (
+                                    <div className="px-4 pb-3 space-y-2 border-t border-gray-50">
+                                      {recs.map(rec => (
+                                        <div key={rec.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                                          <div>
+                                            <span className="text-sm font-medium text-gray-800">{rec.productName}</span>
+                                            <span className="text-xs text-gray-400 ml-2">×{rec.quantity}{rec.unit ? ` ${rec.unit}` : ''}</span>
+                                            {rec.note && <span className="text-xs text-gray-400 ml-2">{rec.note}</span>}
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <button onClick={() => openExpenseForm(rec)} className="text-gray-300 hover:text-blue-500"><Edit2 className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => handleDeleteExpense(rec.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()
                     )}
                   </>
                 );
