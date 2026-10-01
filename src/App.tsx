@@ -899,7 +899,7 @@ export default function App() {
                           <label className="text-[10px] text-gray-400 shrink-0">預設單價 $</label>
                           <input type="number" min="0" defaultValue={prices[p] || 0}
                             onBlur={async (e) => {
-                              const v = Math.max(0, Number(e.target.value)); e.target.value = v;
+                              const v = Number(e.target.value); e.target.value = v;
                               const newPrices = { ...prices, [p]: v };
                               try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...config, expenseProductPrices: newPrices }); } catch {}
                             }}
@@ -1030,7 +1030,7 @@ export default function App() {
                                 {g.items.map(r => (
                                   <div key={r.id} className="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
                                     <div className="flex items-center justify-between text-xs text-gray-500"><span>x{r.quantity}{r.unit?` ${r.unit}`:''}</span><span>{r.date}</span></div>
-                                    <div className="flex items-center gap-2"><label className="text-xs text-gray-500 shrink-0">單價 $</label><input type="number" min="0" defaultValue={r.unitPrice||0} onBlur={async(e)=>{const p=Math.max(0,Number(e.target.value));e.target.value=p;const t=p*(r.quantity||1);try{await updateDoc(doc(db,'artifacts',appId,'public','data','expense_records',r.id),{unitPrice:p,totalPrice:t})}catch{}}} className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none"/></div>
+                                    <div className="flex items-center gap-2"><label className="text-xs text-gray-500 shrink-0">單價 $</label><input type="number" defaultValue={r.unitPrice||0} onBlur={async(e)=>{const p=Number(e.target.value);e.target.value=p;const t=p*(r.quantity||1);try{await updateDoc(doc(db,'artifacts',appId,'public','data','expense_records',r.id),{unitPrice:p,totalPrice:t})}catch{}}} className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none"/></div>
                                     <div className="text-right text-xs font-bold text-amber-600">$ {(r.totalPrice||0).toLocaleString()}</div>
                                     {r.note && <div className="text-xs text-gray-400">{r.note}</div>}
                                   </div>))}
@@ -1039,13 +1039,24 @@ export default function App() {
                           </div>}
                         </div>);
                     })}
-                    {expenseSubPage === 'search' && mRecs.length > 0 && (
-                      <div className="flex gap-2 pt-2"><button onClick={() => {
-                        const rows = mRecs.map(r => `${r.branch},${r.productName},${r.quantity},${r.unit||''},${r.unitPrice||0},${r.totalPrice||0},${r.date},${r.note||''}`);
-                        const csv = '\uFEFF門店,商品,數量,單位,單價,小計,日期,備註\n'+rows.join('\n');
-                        const bl = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-                        const a = document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=`支出報表_${tY}年${tM}月.csv`; a.click();
-                      }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition"><Download className="w-4 h-4"/>匯出 CSV</button></div>
+                    {mRecs.length > 0 && (
+                      <div className="space-y-2 pt-3">
+                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">各店匯出</div>
+                        {bKeys.map((b,bi) => {
+                          const co = sc[bi%sc.length];
+                          const storeRecs = mRecs.filter(r => r.branch === b);
+                          return (
+                            <button key={b} onClick={() => {
+                              const rows = storeRecs.map(r => `${r.productName},${r.quantity},${r.unit||''},${r.unitPrice||0},${r.totalPrice||0},${r.date},${r.note||''}`);
+                              const csv = '\uFEFF商品,數量,單位,單價,小計,日期,備註\n'+rows.join('\n');
+                              const bl = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+                              const a = document.createElement('a'); a.href=URL.createObjectURL(bl); a.download=`${b}_支出報表_${tY}年${tM}月.csv`; a.click();
+                            }} className={`w-full ${co.hd} ${co.bd} border py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition active:scale-[0.98] ${co.tx}`}>
+                              <Download className="w-4 h-4"/>{b} 匯出 CSV
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
                   </>);
                 })()}
