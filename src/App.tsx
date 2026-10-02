@@ -1661,7 +1661,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">數量</label>
-                  <input type="number" min="1" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(1, Number(e.target.value))}))}
+                  <input type="number" min="0" value={expenseForm.quantity} onChange={e => setExpenseForm(p => ({...p, quantity: Math.max(0, Number(e.target.value))}))}
                     className="w-full bg-gray-50 border-none rounded-xl px-4 py-3.5 text-sm font-medium text-gray-800 outline-none" />
                 </div>
                 <div className="space-y-1.5">
